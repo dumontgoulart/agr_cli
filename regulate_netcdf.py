@@ -9,7 +9,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import xarray as xr 
-ds_iizumi.close()
 
 ds_iizumi = xr.open_dataset('outfile_cat1.nc4')
 ds_iizumi['time'] = pd.to_datetime(list(range(1981, 2017)), format='%Y').year
