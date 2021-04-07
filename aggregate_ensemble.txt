@@ -1,0 +1,7 @@
+# Cd to local folder with ensemble of EC-earth runs - ubuntu
+cd /mnt/c/Users/morenodu/"OneDrive - Stichting Deltares"/Documents/PhD/Paper_drought/data/
+
+# For each of the variables, agreggate and shift the time to make the ensemble a single timeseries artifically simulating 2000 years in a row (of a detrended period at a given GW level)
+for s_number in {1..16} ; do s_tag='s'$(printf '%02d' "$s_number"); for r_number in {0..24} ; do r_tag='r'$(printf '%02d' "$r_number") ; echo "$s_tag";  echo "$r_tag" ; cdo cat -apply,shifttime,$(( ($s_number-1) * 125 + $r_number * 5 ))year [ tasmax_d_ECEarth_3C_"$s_tag""$r_tag"_20??.nc ] tasmax_d_ECEarth_3C_ensemble_2082-4082.nc ; done; done   
+for s_number in {1..16} ; do s_tag='s'$(printf '%02d' "$s_number"); for r_number in {0..24} ; do r_tag='r'$(printf '%02d' "$r_number") ; echo "$s_tag";  echo "$r_tag" ; cdo cat -apply,shifttime,$(( ($s_number-1) * 125 + $r_number * 5 ))year [ dtr_d_ECEarth_3C_"$s_tag""$r_tag"_20??.nc ] dtr_d_ECEarth_3C_ensemble_2082-4082.nc ; done; done
+for s_number in {1..16} ; do s_tag='s'$(printf '%02d' "$s_number"); for r_number in {0..24} ; do r_tag='r'$(printf '%02d' "$r_number") ; echo "$s_tag";  echo "$r_tag" ; cdo cat -apply,shifttime,$(( ($s_number-1) * 125 + $r_number * 5 ))year [ pr_d_ECEarth_3C_"$s_tag""$r_tag"_20??.nc ] pr_d_ECEarth_3C_ensemble_2082-4082.nc ; done; done
