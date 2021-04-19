@@ -2,6 +2,7 @@
 **
 
 Steps:
+
   1 - Among the many variables , select the most important (not shown);
   
   2 - Divide the data into two parts: Train and Test;
