@@ -135,6 +135,7 @@ ax.set_extent([-110,-65,25,50], ccrs.PlateCarree())
 ax.set_title('Difference between CRU and EC-earth')
 plt.show()
 
+
 #%% BIAS CORRECTION - Convert and tests
 from xclim import sdba
 
@@ -271,7 +272,162 @@ df_features_ec_2C.columns = column_names
 # Adapt the structure to match the RF structure
 df_features_ec_2C_season = pd.concat( [df_features_ec_2C.iloc[:,0:2].mean(axis=1),df_features_ec_2C.iloc[:,2:4].mean(axis=1),df_features_ec_2C.iloc[:,4:6].mean(axis=1)], axis=1 )
 df_features_ec_2C_season.columns=['tmx_7_8','dtr_7_8', 'precip_7_8']
+
+mask_ref = mask_ref.reindex(lat=mask_ref.lat[::-1])
+#%%
+DS_ec_2c_ref = xr.open_dataset("EC_earth_2C/dtr_m_ECEarth_2C_s01r00_2062.nc",decode_times=True)
+        
+def open_regularize_3c(address_file, reference_file):   
+    # Correct latitude error at ECMWF, latitude is float32 but we need float64
+    DS_ec = xr.open_dataset(address_file,decode_times=True) 
+    DS_ec['lat'] = DS_ec_2c_ref.lat
+    if list(DS_ec.keys())[1] == 'tasmax':
+        da_ec = DS_ec[list(DS_ec.keys())[1]] - 273.15
+    elif list(DS_ec.keys())[1] == 'pr':
+        da_ec = DS_ec[list(DS_ec.keys())[1]] * 1000
+        print('pr selected')
+    elif list(DS_ec.keys())[1] == 'dtr':
+        da_ec = DS_ec[list(DS_ec.keys())[1]]
+    else:
+        raise Exception('Should be either tasmax, pr or dtr')
+    DS_ec = da_ec.to_dataset() 
+    DS_ec_crop = DS_ec.where(reference_file.mean('time') > -300 )
+    return DS_ec_crop
     
+#Temp - Kelvin to celisus
+DS_tmx_ec_3C = open_regularize_3c("EC_earth_3C/tasmax_d_ECEarth_3C_ensemble_2082-4082.nc", DS_pre_cru_us['pre']) 
+# precipitation
+
+ #Temp - Kelvin to celisus
+DS_tmx_ec_3C = open_regularize("EC_earth_3C/tasmax_d_ECEarth_3C_ensemble_2082-4082.nc", DS_pre_cru_us['pre']) 
+# precipitation
+DS_pre_ec_3C = open_regularize("EC_earth_3C/pr_d_ECEarth_3C_ensemble_2082-4082.nc", DS_pre_cru_us['pre']) 
+# dtr
+DS_dtr_ec_3C = open_regularize("EC_earth_3C/dtr_d_ECEarth_3C_ensemble_2082-4082.nc", DS_pre_cru_us['pre']) 
+
+# TEST - why 3C doesn't work
+DS_test3 = xr.open_dataset("EC_earth_3C/pr_d_ECEarth_3C_ensemble_2082-4082.nc",decode_times=True)
+DS_test3b = xr.open_dataset("EC_earth_3C/pr_m_ECEarth_3C_ensemble_2082-4082.nc",decode_times=True)
+DS_test2 = xr.open_dataset("EC_earth_2C/pr_m_ECEarth_2C_ensemble_2062-4062.nc",decode_times=True)
+
+plt.figure(figsize=(20,10)) #plot clusters
+ax=plt.axes(projection=ccrs.Mercator())
+DS_test2.pr.mean('time').plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True,levels=10)
+ax.add_geometries(us1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
+ax.set_extent([-105,-65,20,50], ccrs.PlateCarree())
+ax.set_title(f'Difference between CRU and EC-earth for')
+plt.show()
+
+plt.figure(figsize=(20,10)) #plot clusters
+ax=plt.axes(projection=ccrs.Mercator())
+DS_test3.pr.mean('time').plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True,levels=10)
+ax.add_geometries(us1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
+ax.set_extent([-105,-65,20,50], ccrs.PlateCarree())
+ax.set_title(f'Difference between CRU and EC-earth for')
+plt.show()
+
+plt.figure(figsize=(20,10)) #plot clusterss
+ax=plt.axes(projection=ccrs.Mercator())
+DS_test3b.pr.mean('time').plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True,levels=10)
+ax.add_geometries(us1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
+ax.set_extent([-105,-65,20,50], ccrs.PlateCarree())
+ax.set_title(f'Difference between CRU and EC-earth for')
+plt.show()
+
+# EC-Earth
+def open_regularize_3(address_file, reference_file):    
+    DS_ec = xr.open_dataset(address_file,decode_times=True)
+    DS_ec['lat']=DS_test2.lat
+    if list(DS_ec.keys())[1] == 'tasmax':
+        da_ec = DS_ec[list(DS_ec.keys())[1]] - 273.15
+    elif list(DS_ec.keys())[1] == 'pr':
+        da_ec = DS_ec[list(DS_ec.keys())[1]] * 1000 
+    else:
+        da_ec = DS_ec[list(DS_ec.keys())[1]]
+    DS_ec = da_ec.to_dataset() 
+    DS_ec_crop = DS_ec.where(reference_file.mean('time') > -300 )
+    return DS_ec_crop
+
+DS_pre_ec_3Cm = open_regularize_3("EC_earth_3C/pr_m_ECEarth_3C_ensemble_2082-4082.nc", DS_pre_cru_us['pre']) 
+
+
+
+plt.figure(figsize=(20,10)) #plot clusterss
+ax=plt.axes(projection=ccrs.Mercator())
+DS_pre_ec_2C.pr.mean('time').plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True,levels=10)
+ax.add_geometries(us1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
+ax.set_extent([-105,-65,20,50], ccrs.PlateCarree())
+ax.set_title(f'Difference between CRU and EC-earth for')
+plt.show()
+
+plt.figure(figsize=(20,10)) #plot clusterss
+ax=plt.axes(projection=ccrs.Mercator())
+DS_pre_ec_3Cm.pr.mean('time').plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True,levels=10)
+ax.add_geometries(us1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
+ax.set_extent([-105,-65,20,50], ccrs.PlateCarree())
+ax.set_title(f'Difference between CRU and EC-earth for')
+plt.show()
+
+bias_analysis(DS_pre_cru_us, DS_pre_ec_2C)
+
+bias_analysis(DS_pre_cru_us, DS_pre_ec_3Cm)
+
+
+
+#%% Plot timeseries of ensembles 10-year moving average
+df_PD = DS_tmx_ec['tasmax'].groupby('time.year').mean('time')
+df_PD_av = df_PD.groupby(df_PD.index.year).mean().rolling(10).mean()
+df_PD_av.index = range((2000))
+
+df_2C = DS_tmx_ec_2C['tasmax'].to_dataframe().groupby(['time']).mean().rolling(10).mean()
+df_2C_av = df_2C.groupby(df_2C.index.year).mean().rolling(10).mean()
+df_2C_av.index = range((2000))
+
+df_3C = DS_tmx_ec_3C['tasmax'].to_dataframe().groupby(['time']).mean().rolling(10).mean()
+df_3C_av = df_3C.groupby(df_3C.index.year).mean().rolling(10).mean()
+df_3C_av.index = range((2000))
+
+
+
+plt.plot(df_PD_av)
+plt.plot(df_2C_av)
+plt.plot(df_3C_av)
+
+DS_tmx_ec = open_regularize("EC_earth_PD/tasmax_m_ECEarth_PD_ensemble_2035-4035.nc").groupby('time.year').mean('time')
+
+DS_tmx_ec_2C = open_regularize("EC_earth_2C/tasmax_m_ECEarth_2C_ensemble_2062-4062.nc").groupby('time.year').mean('time') 
+
+DS_tmx_ec_3C = open_regularize("EC_earth_3C/tasmax_d_ECEarth_3C_ensemble_2082-4082.nc").groupby('time.year').mean('time') 
+
+
+DS_tmx_ec_mean = DS_tmx_ec.to_dataframe().groupby(['year']).mean()
+
+DS_tmx_ec_2C_mean = DS_tmx_ec_2C.to_dataframe().groupby(['year']).mean()
+
+DS_tmx_ec_3C_mean = DS_tmx_ec_3C.to_dataframe().groupby(['year']).mean()
+
+DS_tmx_ec_mean.plot()
+
+fig1 = plt.figure(figsize=(12,5))
+plt.plot(DS_tmx_ec_mean.rolling(10).mean(), label = 'Present Day')
+plt.plot(DS_tmx_ec_2C_mean.rolling(10).mean(), label = '2C')
+plt.plot(DS_tmx_ec_3C_mean.rolling(10).mean(), label = '3C')
+plt.legend(loc="lower left")
+plt.title('10-year moving average of EC-Earth ensembles')
+plt.ylabel('Mean global temperature (°C)')
+plt.xlabel('Ensemble years')
+fig1.savefig('paper_figures/ec_earth_moving_average.png', format='png', dpi=250)
+plt.show()
+
+plt.figure(figsize=(20,10)) #plot clusters
+ax=plt.axes(projection=ccrs.Mercator())
+DS_tmx_ec_un['tasmax'].mean('time').plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True)
+ax.add_geometries(us1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
+# ax.set_extent([-105,-25,-50,50], ccrs.PlateCarree())
+ax.set_title('Spatial variability of bias between CRU and EC-earth')
+plt.show()
+
+
 #%% DONE WITH BIAS ADJUSTMENT AND CLIMATE DATA ##################
 #                                                               #
 # Start from below as above it takes a long time to bias adjust #

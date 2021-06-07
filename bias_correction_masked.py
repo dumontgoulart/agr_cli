@@ -9,7 +9,7 @@ import cartopy.crs as ccrs
 import cartopy.io.shapereader as shpreader
 import seaborn as sns
 
-def bias_correction_masked(mask, start_date, end_date, cru_detrend = False):
+def bias_correction_masked(mask, start_date, end_date, cru_detrend = False, df_features_ec_3C_season = False, save_figs = False):
     """
     This function takes as input the EC_earth model projections for PD, 2C and 3C 
     and the mask for a region (US, Brazil, etc.) and corrects the bias to match
@@ -95,7 +95,7 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False):
     
     # Create Bias correction dataset: Detrend time series for higher range and add mean for 1990-2020. 
     if cru_detrend == True:
-        start_date_mean, end_date_mean = '31-12-1916', '31-12-2016'
+        start_date_mean, end_date_mean = start_date, end_date
         DS_tmx_cru_us_det = xr.DataArray( detrend_dim(DS_t_max_cru_us.tmx, 'time') + DS_t_max_cru_us.tmx.sel(
             time=slice(start_date_mean, end_date_mean)).mean('time'), name= DS_t_max_cru_us.tmx.name, attrs = DS_t_max_cru_us.tmx.attrs )
         DS_dtr_cru_us_det = xr.DataArray( detrend_dim(DS_dtr_cru_us.dtr, 'time') + DS_dtr_cru_us.dtr.sel(
@@ -161,6 +161,7 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False):
     DS_tmx_ec['tasmax'].mean('time').plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True)
     ax.add_geometries(us1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
     ax.set_extent([-105,-25,-50,50], ccrs.PlateCarree())
+    ax.set_title('Spatial variability of bias between CRU and EC-earth')
     plt.show()
     
     # Test plot to see if it's good    
@@ -168,7 +169,8 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False):
     ax=plt.axes(projection=ccrs.Mercator())
     DS_dtr_cru_us['dtr'].mean('time').plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True)
     ax.add_geometries(us1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
-    ax.set_extent([-105,-65,20,50], ccrs.PlateCarree())
+    ax.set_extent([-105,-25,-50,50], ccrs.PlateCarree())
+    ax.set_title('Spatial variability of bias between CRU and EC-earth')
     plt.show()
     
     # Measure diference between model and observed data
@@ -178,15 +180,15 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False):
     ax=plt.axes(projection=ccrs.Mercator())
     subt.plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True)
     ax.add_geometries(us1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
-    ax.set_extent([-105,-65,20,50], ccrs.PlateCarree())
-    ax.set_title('Difference between CRU and EC-earth')
+    ax.set_extent([-105,-25,-50,50], ccrs.PlateCarree())
+    ax.set_title('Spatial variability of bias between CRU and EC-earth')
     plt.show()
     
     #%% BIAS CORRECTION - Convert and tests
     from xclim import sdba
     import scipy.stats as stats
     
-    def bias_analysis(obs_data, model_data):
+    def bias_analysis(obs_data, model_data, level = 'PD', cor = 'False'):
         """
         Bias analysis graphs by entering the observed data and the model to be corrected.
         
@@ -197,80 +199,147 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False):
             
         No return, just graphs showing bias
         
-        Created on Wed Feb 10 17:19:09 2021 
-        by @HenriqueGoulart
         """
         df_cru_cli=obs_data.to_dataframe().groupby(['time']).mean() # pandas because not spatially variable anymore
         df_ec=model_data[list(model_data.keys())[0]].to_dataframe().groupby(['time']).mean() # pandas because not spatially variable anymore
-        
+        if cor == 'False':
+            mode = 'not_cor'
+        elif cor == 'True':
+            mode = 'correct'
         # Compare mean annual cycle
         df_cru_year = df_cru_cli.groupby(df_cru_cli.index.month).mean()
         df_ec_year = df_ec.groupby(df_ec.index.month).mean()
         # plot
-        plt.figure(figsize = (6,6), dpi=200)
+        plt.figure(figsize = (5,5), dpi=200)
         plt.plot(df_cru_year, label = 'CRU', color = 'darkblue')
         plt.plot(df_ec_year, label = 'EC-Earth', color = 'red' )
         plt.ylabel(obs_data.attrs['units'])
-        plt.title(f'Mean annual cycle - {obs_data.name}') 
+        plt.title(f'Mean annual cycle - {obs_data.name} {level}') 
         plt.legend(loc="lower left")
+        if save_figs == True:
+            plt.savefig(f'paper_figures/bias_adj_mean_{mode}_{obs_data.name}_{level}.png', format='png', dpi=500)
         plt.show()
         
         # Compare std each year
         df_cru_year_std = df_cru_cli.groupby(df_cru_cli.index.month).std()
         df_ec_year_std = df_ec.groupby(df_ec.index.month).std()
         # plot
-        plt.figure(figsize = (6,6), dpi=200)
+        plt.figure(figsize = (5,5), dpi=200)
         plt.plot(df_cru_year_std, label = 'CRU', color = 'darkblue')
         plt.plot(df_ec_year_std, label = 'EC-Earth', color = 'red' )
         plt.ylabel(obs_data.attrs['units'])
-        plt.title(f'Variability around the mean - {obs_data.name}')
+        plt.title(f'Variability around the mean - {obs_data.name} {level}')
         plt.legend(loc="lower left")
+        if save_figs == True:
+            plt.savefig(f'paper_figures/bias_adj_std_{mode}_{obs_data.name}_{level}.png', format='png', dpi=500)    
         plt.show()
+        
+        stats.probplot(df_cru_cli.iloc[:,0], dist=stats.beta, sparams=(3,2), plot=plt,fit=False)
         
        # Compare Q-Q plot
         fig, ax = plt.subplots(1, 1, figsize=(5, 5), dpi=200)
         stats.probplot(df_ec.iloc[:,0], dist=stats.beta, sparams=(3,2),plot=plt,fit=False)
-        stats.probplot(df_cru_cli.iloc[:,0], dist=stats.beta, sparams=(3,2), plot=plt,fit=False)
         ax.get_lines()[0].set_color('C1')
-        plt.legend(loc="lower left")
+        # plt.legend(loc="lower left")
         plt.show()
+
+        
+    def bias_figure(model_data, model_data_cor, obs_data, scenario = 'PD'):      
+        
+        df_ec = model_data[list(model_data.keys())[0]].to_dataframe().groupby(['time']).mean() # pandas because not spatially variable anymore
+        df_ec_cor = model_data_cor[list(model_data_cor.keys())[0]].to_dataframe().groupby(['time']).mean() # pandas because not spatially variable anymore
+        df_ec_year = df_ec.groupby(df_ec.index.month).mean()
+        df_ec_cor_year = df_ec_cor.groupby(df_ec_cor.index.month).mean() 
+        
+        if scenario == 'PD':
+            df_cru_cli = obs_data.to_dataframe().groupby(['time']).mean() # pandas because not spatially variable anymore
+            df_cru_year = df_cru_cli.groupby(df_cru_cli.index.month).mean()
+            
+            # plot
+            plt.figure(figsize = (5,5), dpi=200)
+            plt.plot(df_cru_year, label = 'CRU', color = 'black')
+            plt.plot(df_ec_year, label = 'EC-Earth original', color = 'darkblue' )
+            plt.plot(df_ec_cor_year, label = 'EC-Earth corrected', color = 'red', linestyle = '--' )
+            plt.ylabel(obs_data.attrs['units'])
+            plt.title(f'Mean annual cycle - {obs_data.name} bias correction') 
+            plt.legend(loc="lower left")
+            if save_figs == True:
+                plt.savefig(f'paper_figures/bias_adj_mean_{obs_data.name}_all.png', format='png', dpi=500)
+            plt.show() 
+            
+        
+        if scenario == '2C':
+            color_plot = 'orange'
+        elif scenario == '3C':
+            color_plot = 'green'
+        if scenario == '2C' or scenario == '3C':
+            # plot
+            plt.figure(figsize = (5,5), dpi=200)
+            plt.plot(df_ec_year, label = f'EC-Earth {scenario}', color = color_plot )
+            plt.plot(df_ec_cor_year, label = 'EC-Earth PD', color = 'red', linestyle = '--' )
+            plt.ylabel(obs_data.attrs['units'])
+            plt.title(f'Mean annual cycle - {obs_data.name} for {scenario}') 
+            plt.legend(loc="lower left")
+            if save_figs == True:
+                plt.savefig(f'paper_figures/bias_adj_mean_{obs_data.name}_{scenario}_adjusted.png', format='png', dpi=500)
+            plt.show() 
+            
         
     # bias correction for tasmax Quantile mapping - First compare the original, then adjust the bias and compare the bias corrected version
-    bias_analysis( DS_cru_merge.tmx, DS_tmx_ec)
+    bias_analysis( DS_cru_merge.tmx, DS_tmx_ec, level = 'PD', cor = 'False')
     dqm_tmx = sdba.adjustment.DetrendedQuantileMapping(nquantiles=25, group='time.month', kind='+')
     dqm_tmx.train(DS_cru_merge['tmx'],DS_tmx_ec['tasmax'])
     DS_tmx_ec_cor = dqm_tmx.adjust(DS_tmx_ec['tasmax'], interp='linear')
     DS_tmx_ec_cor = DS_tmx_ec_cor.to_dataset(name= 'tmx')
-    bias_analysis(DS_cru_merge.tmx, DS_tmx_ec_cor)
+    bias_analysis(DS_cru_merge.tmx, DS_tmx_ec_cor, level = 'PD', cor = 'True')
+        
+    bias_figure(DS_tmx_ec, DS_tmx_ec_cor, DS_cru_merge.tmx, scenario = 'PD')
+    
     
     # bias correction for dtr Quantile mapping - First compare the original, then adjust the bias and compare the bias corrected version
-    bias_analysis(DS_cru_merge.dtr, DS_dtr_ec)
+    bias_analysis(DS_cru_merge.dtr, DS_dtr_ec, level = 'PD', cor = 'False')
     dqm_dtr = sdba.adjustment.DetrendedQuantileMapping(nquantiles=25, group='time.month', kind='+')
     dqm_dtr.train(DS_cru_merge['dtr'],DS_dtr_ec['dtr'])
     DS_dtr_ec_cor = dqm_dtr.adjust(DS_dtr_ec['dtr'], interp='linear')
     DS_dtr_ec_cor = DS_dtr_ec_cor.to_dataset(name= 'dtr')
-    bias_analysis(DS_cru_merge.dtr, DS_dtr_ec_cor)
-    
+    bias_analysis(DS_cru_merge.dtr, DS_dtr_ec_cor, level = 'PD', cor = 'True')
+  
+    bias_figure(DS_dtr_ec, DS_dtr_ec_cor, DS_cru_merge.dtr, scenario = 'PD')
+
     # bias correction for precipitation Quantile mapping - First compare the original, then adjust the bias and compare the bias corrected version
-    bias_analysis(DS_cru_merge.pre, DS_pre_ec)
+    bias_analysis(DS_cru_merge.pre, DS_pre_ec, level = 'PD', cor = 'False')
     dqm_pr = sdba.adjustment.DetrendedQuantileMapping(nquantiles=25, group='time.month', kind='+')
     dqm_pr.train(DS_cru_merge['pre'],DS_pre_ec['pr'])
     DS_pre_ec_cor = dqm_pr.adjust(DS_pre_ec['pr'], interp='linear')
     DS_pre_ec_cor = DS_pre_ec_cor.to_dataset(name= 'pre')
-    bias_analysis(DS_cru_merge.pre, DS_pre_ec_cor)
+    bias_analysis(DS_cru_merge.pre, DS_pre_ec_cor, level = 'PD', cor = 'True')
     
+    bias_figure(DS_pre_ec, DS_pre_ec_cor, DS_cru_merge.pre, scenario = 'PD')
+
     # Merge in one dataset
     DS_cli_ec = xr.merge([DS_tmx_ec_cor.tmx, DS_dtr_ec_cor.dtr, DS_pre_ec_cor.pre])
     
+    letter = 'a)'
     for feature in list(DS_cli_ec.keys()):
+        if feature == 'tmx':
+            letter = 'a)'
+            sel_kwargs={'label': '°C'}
+        elif feature == 'dtr':
+            letter = 'b)'
+            sel_kwargs={'label': '°C'}
+        elif feature == 'pre':
+            letter = 'c)' 
+            sel_kwargs={'label': 'mm/month'}
+                    
         subt_cor = DS_cli_ec[feature].mean('time') - DS_cru_merge[feature].mean('time')
         
-        plt.figure(figsize=(20,10)) #plot clusters
+        plt.figure(figsize=(10,5)) #plot clusters
         ax=plt.axes(projection=ccrs.Mercator())
-        subt_cor.plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True,levels=10)
+        subt_cor.plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True,levels=10, cbar_kwargs = sel_kwargs)
         ax.add_geometries(us1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
         ax.set_extent([-105,-65,20,50], ccrs.PlateCarree())
-        ax.set_title(f'Difference between CRU and EC-earth for {feature}')
+        ax.set_title(f'{letter} Corrected bias for {feature}')
+        plt.tight_layout()
         plt.show()
         
     #%% 2C simulation - future data
@@ -282,29 +351,76 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False):
     # dtr
     DS_dtr_ec_2C = open_regularize("EC_earth_2C/dtr_m_ECEarth_2C_ensemble_2062-4062.nc", DS_pre_cru_us['pre']) 
     
-    # bias correction for tasmax
-    bias_analysis(DS_cru_merge.tmx, DS_tmx_ec_2C)
-    DS_tmx_ec_2C_cor = dqm_tmx.adjust(DS_tmx_ec_2C['tasmax'], interp='linear')
-    DS_tmx_ec_2C_cor = DS_tmx_ec_2C_cor.to_dataset(name= 'tmx')
-    bias_analysis(DS_cru_merge.tmx, DS_tmx_ec_2C_cor)
+    def bias_correction(DS_cru_merge, DS_ec, detrend_model, var_name, level = 'PD'):
+        bias_analysis(DS_cru_merge, DS_ec, level = level, cor = 'False')
+        DS_ec_cor = detrend_model.adjust(DS_ec[list(DS_ec.keys())[0]], interp='linear')
+        DS_ec_cor = DS_ec_cor.to_dataset(name= var_name)
+        bias_analysis(DS_cru_merge, DS_ec_cor, level = level, cor = 'True')
+        return DS_ec_cor
     
-    # bias correction for dtr Quantile mapping
-    bias_analysis(DS_cru_merge.dtr, DS_dtr_ec_2C)
-    DS_dtr_ec_2C_cor = dqm_dtr.adjust(DS_dtr_ec_2C['dtr'], interp='linear')
-    DS_dtr_ec_2C_cor = DS_dtr_ec_2C_cor.to_dataset(name= 'dtr')
-    bias_analysis(DS_cru_merge.dtr, DS_dtr_ec_2C_cor)
-    
-    # bias correction for precipitation Quantile mapping
-    bias_analysis(DS_cru_merge.pre, DS_pre_ec_2C)
-    DS_pre_ec_2C_cor = dqm_pr.adjust(DS_pre_ec_2C['pr'], interp='linear')
-    DS_pre_ec_2C_cor = DS_pre_ec_2C_cor.to_dataset(name= 'pre')
-    bias_analysis(DS_cru_merge.pre, DS_pre_ec_2C_cor)
+    # Correct bias    
+    DS_tmx_ec_2C_cor = bias_correction(DS_cru_merge.tmx, DS_tmx_ec_2C, dqm_tmx, 'tmx', level = '2C')
+    DS_dtr_ec_2C_cor = bias_correction(DS_cru_merge.dtr, DS_dtr_ec_2C, dqm_dtr, 'dtr', level = '2C')
+    DS_pre_ec_2C_cor = bias_correction(DS_cru_merge.pre, DS_pre_ec_2C, dqm_pr, 'pre', level = '2C')
+        
+    # Plot figures to compare PD to 2C
+    bias_figure(DS_tmx_ec_2C_cor, DS_tmx_ec_cor, DS_cru_merge.tmx, scenario = '2C')
+    bias_figure(DS_dtr_ec_2C_cor, DS_dtr_ec_cor, DS_cru_merge.dtr, scenario = '2C')
+    bias_figure(DS_pre_ec_2C_cor, DS_pre_ec_cor, DS_cru_merge.pre, scenario = '2C')
     
     # Merge in one dataset
     DS_cli_ec_2C = xr.merge([DS_tmx_ec_2C_cor.tmx, DS_dtr_ec_2C_cor.dtr, DS_pre_ec_2C_cor.pre])
+    if df_features_ec_3C_season is False: 
+        print('3C NOT included')
 
-    return(DS_cli_ec, DS_cli_ec_2C)
+        
+        return(DS_cli_ec, DS_cli_ec_2C)
 
+#%% 3C simulation - future data
+    elif df_features_ec_3C_season is True:
+        print('3C included')
+        
+        DS_ec_2c_ref = xr.open_dataset("EC_earth_2C/dtr_m_ECEarth_2C_s01r00_2062.nc",decode_times=True)
+        
+        def open_regularize_3c(address_file, reference_file):   
+            # Correct latitude error at ECMWF, latitude is float32 but we need float64
+            DS_ec = xr.open_dataset(address_file,decode_times=True) 
+            DS_ec['lat'] = DS_ec_2c_ref.lat
+            if list(DS_ec.keys())[1] == 'tasmax':
+                da_ec = DS_ec[list(DS_ec.keys())[1]] - 273.15
+            elif list(DS_ec.keys())[1] == 'pr':
+                da_ec = DS_ec[list(DS_ec.keys())[1]] * 1000
+                print('pr selected')
+            elif list(DS_ec.keys())[1] == 'dtr':
+                da_ec = DS_ec[list(DS_ec.keys())[1]]
+            else:
+                raise Exception('Should be either tasmax, pr or dtr')
+            DS_ec = da_ec.to_dataset() 
+            DS_ec_crop = DS_ec.where(reference_file.mean('time') > -300 )
+            return DS_ec_crop
+        
+        #Temp - Kelvin to celisus
+        DS_tmx_ec_3C = open_regularize_3c("EC_earth_3C/tasmax_d_ECEarth_3C_ensemble_2082-4082.nc", DS_pre_cru_us['pre']) 
+        # precipitation
+        DS_pre_ec_3C = open_regularize_3c("EC_earth_3C/pr_m_ECEarth_3C_ensemble_2082-4082.nc", DS_pre_cru_us['pre']) 
+        # dtr
+        DS_dtr_ec_3C = open_regularize_3c("EC_earth_3C/dtr_d_ECEarth_3C_ensemble_2082-4082.nc", DS_pre_cru_us['pre']) 
+        
+        # Correct bias
+        DS_tmx_ec_3C_cor = bias_correction(DS_cru_merge.tmx, DS_tmx_ec_3C, dqm_tmx, 'tmx', level = '3C')
+        DS_dtr_ec_3C_cor = bias_correction(DS_cru_merge.dtr, DS_dtr_ec_3C, dqm_dtr, 'dtr', level = '3C')
+        DS_pre_ec_3C_cor = bias_correction(DS_cru_merge.pre, DS_pre_ec_3C, dqm_pr, 'pre', level = '3C')
+           
+        # Plot figures to compare PD to 3C
+        bias_figure(DS_tmx_ec_3C_cor, DS_tmx_ec_cor, DS_cru_merge.tmx, scenario = '3C')
+        bias_figure(DS_dtr_ec_3C_cor, DS_dtr_ec_cor, DS_cru_merge.dtr, scenario = '3C')
+        bias_figure(DS_pre_ec_3C_cor, DS_pre_ec_cor, DS_cru_merge.pre, scenario = '3C')
+    
+        # Merge in one dataset
+        DS_cli_ec_3C = xr.merge([DS_tmx_ec_3C_cor.tmx, DS_dtr_ec_3C_cor.dtr, DS_pre_ec_3C_cor.pre])
+
+        return(DS_cli_ec, DS_cli_ec_2C, DS_cli_ec_3C)
+    
 #%% Function conversion
 
 def function_conversion(DS_cli_ec_PD, DS_cli_ec_2C, DS_cli_ec_3C = None, months_to_be_used=[7,8], water_year = False):
@@ -402,7 +518,7 @@ def function_conversion(DS_cli_ec_PD, DS_cli_ec_2C, DS_cli_ec_3C = None, months_
     print("PD done!")
     # FUTURE 2C
     df_features_ec_2C,df_features_ec_season_2C = dataset_to_dataframe(DS_cli_ec_2C)
-    
+    print("2C done!")
     # FUTURE 3C
     if DS_cli_ec_3C is None:
         return df_features_ec_season,df_features_ec_season_2C
@@ -417,7 +533,7 @@ def function_conversion(DS_cli_ec_PD, DS_cli_ec_2C, DS_cli_ec_3C = None, months_
 #%% Scenario exploration
 
 def predictions_permutation(brf_model, df_clim_agg_chosen, df_features_ec_season,
-                            df_features_ec_2C_season = None, df_clim_2012 = None): #df_features_ec_3C_season = None 
+                            df_features_ec_2C_season = None, df_features_ec_3C_season = None, df_clim_2012 = None): 
 
     """
     This function takes as input the bias corrected EC_earth model projections,
@@ -450,9 +566,8 @@ def predictions_permutation(brf_model, df_clim_agg_chosen, df_features_ec_season
               " And the ratio of failure seasons by total seasons is:", score_prc, "\n")     
         probs = brf_model.predict_proba(df_features_ec_season)        
         if df_clim_2012 is not None:
-            limit_2012 = y_pred_2012
-            seasons_over_2012 = df_features_ec_season[probs[:,1]>=limit_2012]
-            print(f"\n Number of {limit_2012}% events: {len(seasons_over_2012)} and mean conditions are:", 
+            seasons_over_2012 = df_features_ec_season[probs[:,1]>=y_pred_2012]
+            print(f"\n Number of >= {y_pred_2012} probability failure events: {len(seasons_over_2012)} and mean conditions are:", 
                   np.mean(seasons_over_2012))
         
         return y_pred, score_prc, probs, seasons_over_2012
@@ -593,7 +708,7 @@ def predictions_permutation(brf_model, df_clim_agg_chosen, df_features_ec_season
         return score_prc
     
     #%% Predictions for 2C degree
-    elif df_features_ec_2C_season is not None:
+    elif (df_features_ec_2C_season is not None and df_features_ec_3C_season is None):
     
         # PERMUTATION ---------- Preliminary analysis shows that precipitation is such an important variable that it alone can predict a good amount of the failures, irrespective of the other variables
         df_features_ec_2C_season_permuted = df_features_ec_2C_season.apply(np.random.RandomState(seed=1).permutation, axis=0)    
@@ -705,7 +820,7 @@ def predictions_permutation(brf_model, df_clim_agg_chosen, df_features_ec_season
             i=i+1
         df_fails_prob_together_2C = pd.DataFrame( fails_prob_together_2C, index = thresholds, columns = probs_agg_t2.columns)
         
-        # Plot figure ti cinoare the amount of cases above the thresholds
+        # Plot figure ti compare the amount of cases above the thresholds
         plt.figure(figsize=(6,6), dpi=150)
         sns.lineplot(data=df_fails_prob_together_2C)
         plt.axvline(x=50, alpha=0.5,c='k',linestyle=(0, (5, 5)))
@@ -736,9 +851,176 @@ def predictions_permutation(brf_model, df_clim_agg_chosen, df_features_ec_season
         print(table_scores) 
         
         return table_scores, table_events_prob2012
+    
+    #%% Predictions for 2C and 3C degree
+    elif (df_features_ec_2C_season is not None and df_features_ec_3C_season is not None):
+    
+        # PERMUTATION ---------- Preliminary analysis shows that precipitation is such an important variable that it alone can predict a good amount of the failures, irrespective of the other variables
+        df_features_ec_2C_season_permuted = df_features_ec_2C_season.apply(np.random.RandomState(seed=1).permutation, axis=0)    
+        df_features_ec_3C_season_permuted = df_features_ec_3C_season.apply(np.random.RandomState(seed=1).permutation, axis=0)    
+        
+        # predictions for observed data PD
+        y_pred_2C, score_prc_2C, probs_2C, seasons_over_2012_2C = predictions(brf_model, df_features_ec_2C_season)
+        
+        # Predictions for permuted
+        y_pred_2C_perm, score_prc_perm_2C, probs_perm_2C, seasons_over_2012_perm_2C = predictions(brf_model, df_features_ec_2C_season_permuted)
+        
+        # predictions for observed data PD
+        y_pred_3C, score_prc_3C, probs_3C, seasons_over_2012_3C = predictions(brf_model, df_features_ec_3C_season)
+        
+        # Predictions for permuted
+        y_pred_3C_perm, score_prc_perm_3C, probs_perm_3C, seasons_over_2012_perm_3C = predictions(brf_model, df_features_ec_3C_season_permuted)
+                
+        # Difference between obs. and permuted
+        print("The 2C ratio between predicted failures in observed data and permuted data is:", 
+              score_prc_2C / score_prc_perm_2C)
+        print("The 3C ratio between predicted failures in observed data and permuted data is:", 
+              score_prc_3C / score_prc_perm_3C)
+        
+        # plots comparing prediction confidence for obs and perumuted
+        probs_agg_2C, sorted_probs_2C = plot_probs_failure(probs_2C, probs_perm_2C)
+   
+        # check the ensembles to see how likely the ordered values stand wrt to the ensemble
+        probs_2C_bootstrap_test = probs_bootstrap(df_features_ec_2C_season, probs_2C)
+        
+        # plots comparing prediction confidence for obs and perumuted
+        probs_agg_3C, sorted_probs_3C = plot_probs_failure(probs_3C, probs_perm_3C)
+             
+        ### Plot comparing 2C and PD return periods
+        plt.figure(figsize=(6,6), dpi=150)
+        sns.scatterplot(data = sorted_probs, x=sorted_probs["return-years"], 
+                        y=sorted_probs["Ordered"], label='PD',linewidth=0 ) 
+        sns.scatterplot(data = sorted_probs_2C, x=sorted_probs_2C["return-years"], 
+                        y=sorted_probs_2C["Ordered"], label = '2C',linewidth=0 )
+        sns.scatterplot(data = sorted_probs_3C, x=sorted_probs_3C["return-years"], 
+                        y=sorted_probs_3C["Ordered"], label = '3C',linewidth=0 )
+        
+        if y_pred_2012 is not None:
+            plt.axhline(y = y_pred_2012, linestyle = '--', color = 'k', label='2012')
+        plt.xscale('log')
+        plt.legend(loc="lower right")
+        plt.xlabel('years')
+        plt.ylabel('Failure probability')
+        plt.title("Confidence event and return period for PD and 2C")
+        plt.show()
+        
+        ### Graph comparing ensemble PD for 100 years against 100 years CRU
+        probs_cru = brf_model.predict_proba(df_clim_agg_chosen)[:,1]  
+        df_probs_cru=pd.DataFrame( probs_cru, columns = ['Ordered'])
+        sorted_probs_cru = return_period(df_probs_cru, 'Ordered')
+        
+        # Reshape to have 100 years each column
+        probs_ec_ensemble = np.reshape(probs[:,1], (100,20))
+        probs_ec_ensemble = pd.DataFrame(probs_ec_ensemble)
+        
+        df_ordered = np.empty([100,20])
+        df_return_year = np.empty([100,20])
+        
+        for i in list(probs_ec_ensemble.columns):
+            sorted_probs_ec_ensemble = return_period(probs_ec_ensemble, [i])
+            df_ordered[:,i] = sorted_probs_ec_ensemble[i]
+            df_return_year[:,i] = sorted_probs_ec_ensemble["return-years"]
+        
+        df_return_year = pd.DataFrame(df_return_year)
+        df_ordered = pd.DataFrame(df_ordered)
+        
+        # Statistics ensemble // If each obs needs to be ploted: # plt.scatter( x=df_return_year, y=df_ordered)
+        ord_min = np.min(df_ordered, axis=1)
+        ord_max = np.max(df_ordered, axis=1)
+        ord_mean = np.mean(df_ordered, axis=1)
+        
+        plt.figure(figsize=(6,6), dpi=150)
+        plt.fill_between(df_return_year[0], ord_min, ord_max,
+                         facecolor="orange", # The fill color
+                         color='blue',       # The outline color
+                         alpha=0.2, label= 'Ensemble')          # Transparency of the fill
+        plt.scatter( x=df_return_year[0], y=ord_mean,label = 'Mean ensemble',)
+        sns.scatterplot(data = sorted_probs_cru, x=sorted_probs_cru["return-years"], 
+                                y=sorted_probs_cru["Ordered"], label = 'CRU',linewidth=0 )
+        plt.xscale('log')
+        plt.legend(loc="lower right")
+        plt.xlabel('years')
+        plt.ylabel('Failure probability')
+        plt.title("Confidence event and return period for PD and 2C")
+        plt.savefig('paper_figures/return_period_ensemble.png', format='png', dpi=150)
+        plt.show()
+
+        
+        # Compare 2C with PD       
+        print("Comparison PD with 2C")
+        print("The ratio between failures in 2C and PD is",score_prc_2C/score_prc, "\n")
+        print("The increase in failures between 2C and PD is", (score_prc_2C - score_prc)*100,"% \n")
+        print("Comparison PD with 2C")
+        print("The ratio between failures in 3C and PD is",score_prc_3C/score_prc, "\n")
+        print("The increase in failures between 3C and PD is", (score_prc_3C - score_prc)*100,"% \n")
+        
+        # put them together in the same dataframe for plotting
+        probs_agg_t2=pd.DataFrame( [probs[:,1],probs_2C[:,1],probs_3C[:,1] ]).T
+        probs_agg_t2.columns=['Present','2C','3C']
+        
+        # plots comparing prediction confidence for each arrangement of data
+        probs_agg_t2_melt = probs_agg_t2.melt(value_name='Failure probability').assign(data='Density')
+        
+        # ax = sns.violinplot(data=probs_agg_t2_melt, x="data", y='Failure probability',
+        #                     hue='variable', split=True, inner="quartile",bw=.1)
+        
+        # sns.displot(probs_agg_t2_melt, x="Failure probability",hue="variable", kind="kde", fill='True')
+        sns.displot(probs_agg_t2_melt, x="Failure probability",hue="variable",kde=False)
+        plt.show()
+        # Compare the number of cases above a failure threshold
+        fails_prob_together_3C = np.empty([len(thresholds),3])
+        i=0
+        for prc in thresholds: 
+            # print(f'The number of PD seasons with failure probability over {prc}% is:', 
+            #       len(probs[:,1][probs[:,1]>prc/100]), 'and 2C is: ',
+            #       len(probs_2C[:,1][probs_2C[:,1]>prc/100]))
+                 
+            fails_prob_together_3C[i,:] = (len(probs[:,1][probs[:,1]>prc/100]),
+                                           len(probs_2C[:,1][probs_2C[:,1]>prc/100]),
+                                               len(probs_3C[:,1][probs_3C[:,1]>prc/100]))
+            i=i+1
+        df_fails_prob_together_3C = pd.DataFrame( fails_prob_together_3C, index = thresholds, columns = probs_agg_t2.columns)
+        
+        # Plot figure ti compare the amount of cases above the thresholds
+        plt.figure(figsize=(6,6), dpi=150)
+        sns.lineplot(data=df_fails_prob_together_3C)
+        plt.axvline(x=50, alpha=0.5,c='k',linestyle=(0, (5, 5)))
+        plt.ylabel('Amount of cases')
+        plt.xlabel('Threshold (%)')
+        plt.title('Number of cases above a failure prediction level')
+        plt.show()
+        
+        plt.figure(figsize=(6,6), dpi=150)
+        sns.lineplot(data=df_fails_prob_together_3C, y=df_fails_prob_together_3C['2C']/df_fails_prob_together_3C['Present'], x = df_fails_prob_together_3C.index)
+        plt.ylabel('Ratio 2C / present')
+        plt.xlabel('Threshold (%)')
+        plt.title('Ratio between 2C and present for each threshold level')
+        plt.show()
+
+        plt.figure(figsize=(6,6), dpi=150)
+        sns.lineplot(data=df_fails_prob_together_3C, y=df_fails_prob_together_3C['3C']/df_fails_prob_together_3C['Present'], x = df_fails_prob_together_3C.index)
+        plt.ylabel('Ratio 3C / present')
+        plt.xlabel('Threshold (%)')
+        plt.title('Ratio between 3C and present for each threshold level')
+        plt.show()
+        # print("The mean ratio across all thresholds is:", np.mean(df_fails_prob_together_2C['2C']/df_fails_prob_together_2C['Present']))
+        
+        # Table with occurrences of similar extreme values to 2012
+        table_events_prob2012 = pd.DataFrame([[len(seasons_over_2012),len(seasons_over_2012_2C),len(seasons_over_2012_3C) ],
+                                              [len(seasons_over_2012_perm),len(seasons_over_2012_perm_2C), len(seasons_over_2012_perm_3C)]], 
+                                             columns = ['PD','2C','3C'], index = ['Ord.','Perm.'])
+        print(table_events_prob2012) 
+        # Table with scores comparison    
+        table_scores = pd.DataFrame( [[score_prc, score_prc_2C, score_prc_3C, score_prc_2C/score_prc, score_prc_3C/score_prc], 
+                                      [score_prc_perm, score_prc_perm_2C,score_prc_perm_3C, score_prc_perm_2C/score_prc_perm, score_prc_perm_3C/score_prc_perm],
+                                      [score_prc/score_prc_perm,score_prc_2C/score_prc_perm_2C,score_prc_3C/score_prc_perm_3C, np.nan ]],
+                                        columns = ['PD','2C', '3C','2C/PD', '3C/PD'], index = ['Ord.','Perm.', 'Ord./Perm.'] )
+        print(table_scores) 
+        
+        return table_scores, table_events_prob2012
 
 #%%  compound analysis
-def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_season = None, df_clim_2012 = None): #df_features_ec_3C_season = None 
+def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_season = None, df_features_ec_3C_season = None, df_clim_2012 = None): 
     """
     This function analyses the climatic features from a compound perspective.
     Its aims are: 1) correlation structure importance in joint occurrences;
@@ -759,6 +1041,11 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
     Created on Wed Feb 10 17:19:09 2021 
     by @HenriqueGoulart
     """
+    sns.set(font_scale = 1.2)
+    sns.set_style("white")
+    sns.set_style("ticks")
+    sns.despine()
+    plt.rcParams['legend.frameon'] = False
     # PERMUTATION 
     df_features_ec_season_permuted = df_features_ec_season.apply(np.random.RandomState(seed=1).permutation, axis=0)    
     
@@ -800,7 +1087,7 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         plt.title("Scatter plot and regression line")
         plt.show()
         
-        sns.jointplot(data=df_features_ec_season_fail, y=df_features_ec_season.columns[0], x=df_features_ec_season.columns[2],hue='Failure')
+        # sns.jointplot(data=df_features_ec_season_fail, y=df_features_ec_season.columns[0], x=df_features_ec_season.columns[2],hue='Failure')
         
         sns.lmplot(data=df_features_ec_season_fail, y=df_features_ec_season.columns[0],
                    x=df_features_ec_season.columns[1],fit_reg=True, 
@@ -812,7 +1099,7 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         plt.title("Scatter plot and regression line")
         plt.show()
        
-        sns.jointplot(data=df_features_ec_season_fail, y=df_features_ec_season.columns[0], x=df_features_ec_season.columns[1],hue='Failure')
+        # sns.jointplot(data=df_features_ec_season_fail, y=df_features_ec_season.columns[0], x=df_features_ec_season.columns[1],hue='Failure')
             
         # # 3D - turn off
         # from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import   
@@ -890,22 +1177,28 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
                 (df_features_ec_season.iloc[:,2] <= df_clim_2012.iloc[2]), 1, 0) )
             print("\n Number of seasons with conditions equal or more restrict than the 2012 season:", JO_fail_2012)
             
+            tmx_2012_analogues = sum(np.where((df_features_ec_season.iloc[:,0] >=  df_clim_2012.iloc[0]), 1, 0))
+            dtr_2012_analogues = sum(np.where((df_features_ec_season.iloc[:,1] >=  df_clim_2012.iloc[1]), 1, 0))
+            precip_2012_analogues = sum(np.where((df_features_ec_season.iloc[:,2] <=  df_clim_2012.iloc[2]), 1, 0))
+                                     
+            print(f"\n SUM 2012 analogues univariate: tmx = {tmx_2012_analogues}, dtr = {dtr_2012_analogues}, precip = {precip_2012_analogues}")
+            
         print("__________________________________________________________________________","\n")
         
         return fail_joint, fail_or, JO_fail_2012
     
     print("- ORDERED")
-    fail_joint_obs, fail_or_obs, JO_fail_2012_obs = compound_analysis(df_features_ec_season,y_pred)
+    fail_joint_obs, fail_or_obs, JO_fail_2012_obs = compound_analysis(df_features_ec_season, y_pred)
     
     # permutation joint analysis
     print("- PERMUTED")
-    fail_joint_perm, fail_or_perm, JO_fail_2012_perm = compound_analysis(df_features_ec_season_permuted,y_pred_perm)
+    fail_joint_perm, fail_or_perm, JO_fail_2012_perm = compound_analysis(df_features_ec_season_permuted, y_pred_perm)
     
     if df_features_ec_2C_season is None:
         return fail_joint_obs, fail_joint_perm
     
     #%% Compound analysis 2C
-    if df_features_ec_2C_season is not None:
+    if df_features_ec_2C_season is not None and df_features_ec_3C_season is None:
         
         # PERMUTATION 2C
         df_features_ec_2C_season_permuted = df_features_ec_2C_season.apply(np.random.RandomState(seed=1).permutation, axis=0)  
@@ -916,7 +1209,7 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         
         # mean conditions
         dif_mean =  np.mean( df_features_ec_2C_season[y_pred_2C == 1] , axis=0) - np.mean( df_features_ec_season[y_pred == 1] , axis=0)
-        print("Mean conditions 2C - PD is: \n", dif_mean)
+        print("Mean conditions Failures 2C - PD is: \n", dif_mean)
         # climate data original structure and permuted joint analysis
         print("2C ----------------------")
         fail_joint_obs_2C, fail_or_obs_2C, JO_fail_2012_obs_2C = compound_analysis(df_features_ec_2C_season,y_pred_2C)
@@ -929,6 +1222,7 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         print("Ratio between 2C correlated and permuted joint occurrences is",fail_joint_obs_2C/fail_joint_perm_2C)
         print("Ratio between 2C and PD correlated joint occurrences",fail_joint_obs_2C/fail_joint_obs)
         print("Ratio between 2C and PD permuted joint occurrences",fail_joint_perm_2C/fail_joint_perm)
+        
         
         # Table with all values indicating joint, univariate cases and predicted values
         scenario_columns = ['PD','PD perm','2C','2C perm']
@@ -945,11 +1239,10 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         df_joint_or_rf['PD/ PD perm']= df_joint_or_rf['PD']/df_joint_or_rf['PD perm']
         df_joint_or_rf['2C/ 2C perm'] = df_joint_or_rf['2C']/df_joint_or_rf['2C perm']
         
-        # Plot graphs comparing the difference between 2C and PD
-        for (df_features_ec_season_1, df_features_ec_2C_season_1, case) in zip(
-                [df_features_ec_season, df_features_ec_season_permuted],
-                [df_features_ec_2C_season, df_features_ec_2C_season_permuted],
-                ['ord','perm']):
+        
+        # Function for plot creation with climatic variables distribution
+        def plot_climatic_distributions(df_features_ec_season_1, df_features_ec_2C_season_1, case = 'ord', 
+                                        y_axis = 0, x_axis=2, title_fig = 'Temperature and precipitation'):
             
             df_features_ec_season_fail_PD =pd.concat([
                 df_features_ec_season_1,
@@ -968,25 +1261,113 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
             df_features_ec_season_scenarios = pd.concat([
                 df_features_ec_season_fail_PD, df_features_ec_season_fail_2C], axis= 0)
             
-            for (y_axis, x_axis) in zip([0,0],[2,1]): 
-                # sns.lmplot(data=df_features_ec_season_scenarios, y=df_features_ec_season.columns[y_axis], 
-                #            x=df_features_ec_season.columns[x_axis],fit_reg=True, 
-                #            scatter_kws={"s": 10}, hue='Scenario',legend_out=False)
-                # plt.title("Climatic variables for each scenario")
-                if case == 'ord':
-                    name_plot = "plot_ord_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
-                elif case == 'perm':
-                    name_plot = "plot_perm_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
                 
-                print(name_plot)
-                sns.jointplot(data=df_features_ec_season_scenarios, y = df_features_ec_season.columns[y_axis],
-                              x=df_features_ec_season.columns[x_axis], kind="kde", 
-                              palette=["#92C6FF", "#fabbff", "#97F0AA","#FF9F9A"],
-                              hue='Scenario',fill=True, joint_kws = {'alpha': 0.7},
-                              hue_order= ['PD','2C','Failure PD','Failure 2C'])
-                plt.savefig('paper_figures/{}.png'.format(name_plot), dpi=150)
-                plt.show()
+            if case == 'ord':
+                name_plot = "plot_ord_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
+            elif case == 'perm':
+                name_plot = "plot_perm_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
+            
+            print(name_plot)
+            plt.figure(figsize = (6,6),dpi=500)
+            
+            p = sns.jointplot(data=df_features_ec_season_scenarios, y = df_features_ec_season.columns[y_axis],
+                          x=df_features_ec_season.columns[x_axis], kind="kde", 
+                          palette=["#92C6FF", "#fabbff", "#e7298a","#FF9F9A"],
+                          hue='Scenario',fill=True, joint_kws = {'alpha': 0.7},
+                          hue_order= ['PD','2C','Failure PD','Failure 2C'])
+            
+            p.fig.suptitle(title_fig)
+            plt.tight_layout()
+            # plt.subplots_adjust(hspace=0, wspace=0)
+            plt.savefig('paper_figures/{}.png'.format(name_plot), dpi=500)
+                # plt.show()
                 # plt.title("Climatic variables for each scenario")
+            pp_p = plt.gca()
+            print("IT WORKS!")
+            return pp_p
+        
+        fig_clim_pr = plot_climatic_distributions(df_features_ec_season, df_features_ec_2C_season, y_axis = 0, x_axis=2, title_fig = 'a) Temperature and precipitation')
+        fig_clim_dtr = plot_climatic_distributions(df_features_ec_season, df_features_ec_2C_season, y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR')
+        
+        
+        # Combine the two figures in one plot
+        import PIL
+        from PIL import Image
+        
+        list_im = ['paper_figures/plot_ord_precip_7_8tmx_7_8.png', 'paper_figures/plot_ord_dtr_7_8tmx_7_8.png']
+        imgs    = [ PIL.Image.open(i) for i in list_im ]
+        
+        widths, heights = zip(*(i.size for i in imgs))
+        
+        total_width = sum(widths)
+        max_height = max(heights)
+        
+        new_im = Image.new('RGB', (total_width, max_height))
+        
+        x_offset = 0
+        for im in imgs:
+          new_im.paste(im, (x_offset,0))
+          x_offset += im.size[0]
+        
+        new_im.save('paper_figures/plot_order_clim_combine.png')
+
+        # Subfigures - not working, package too new still     
+        # fig = plt.figure(constrained_layout=True, figsize=(10, 4))
+        # subfigs = fig.subfigures(1, 2, wspace=0.07)
+        # axsLeft = subfigs[0]
+        
+        # axsLeft = fig_clim_pr
+        # axsRight = subfigs[1]
+        # axsRight = fig_clim_dtr
+        # fig.suptitle('Figure suptitle', fontsize='xx-large')
+        # plt.show()
+        
+        # # Plot graphs comparing the difference between 2C and PD
+        # for (df_features_ec_season_1, df_features_ec_2C_season_1, case) in zip(
+        #         [df_features_ec_season, df_features_ec_season_permuted],
+        #         [df_features_ec_2C_season, df_features_ec_2C_season_permuted],
+        #         ['ord','perm']):
+            
+        #     df_features_ec_season_fail_PD =pd.concat([
+        #         df_features_ec_season_1,
+        #         pd.DataFrame(np.array([y_pred < -1]).T, index=df_features_ec_season_1.index, columns=['Scenario'])],axis=1)
+            
+        #     df_features_ec_season_fail_PD['Scenario'] = 'PD'
+        #     df_features_ec_season_fail_PD['Scenario'][y_pred == 1] = 'Failure PD'
+            
+        #     df_features_ec_season_fail_2C =pd.concat([
+        #         df_features_ec_2C_season_1,
+        #         pd.DataFrame(np.array([y_pred_2C > -1 ]).T, index=df_features_ec_2C_season_1.index,columns=['Scenario'])],axis=1)
+            
+        #     df_features_ec_season_fail_2C['Scenario'] = '2C'
+        #     df_features_ec_season_fail_2C['Scenario'][y_pred_2C == 1] = 'Failure 2C'
+                        
+        #     df_features_ec_season_scenarios = pd.concat([
+        #         df_features_ec_season_fail_PD, df_features_ec_season_fail_2C], axis= 0)
+            
+        #     for (y_axis, x_axis) in zip([0,0],[2,1]): 
+        #         # sns.lmplot(data=df_features_ec_season_scenarios, y=df_features_ec_season.columns[y_axis], 
+        #         #            x=df_features_ec_season.columns[x_axis],fit_reg=True, 
+        #         #            scatter_kws={"s": 10}, hue='Scenario',legend_out=False)
+        #         # plt.title("Climatic variables for each scenario")
+        #         if case == 'ord':
+        #             name_plot = "plot_ord_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
+        #         elif case == 'perm':
+        #             name_plot = "plot_perm_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
+                
+        #         print(name_plot)
+        #         plt.figure(figsize = (5,5),dpi=500)
+                
+        #         sns.jointplot(data=df_features_ec_season_scenarios, y = df_features_ec_season.columns[y_axis],
+        #                       x=df_features_ec_season.columns[x_axis], kind="kde", 
+        #                       palette=["#92C6FF", "#fabbff", "#e7298a","#FF9F9A"],
+        #                       hue='Scenario',fill=True, joint_kws = {'alpha': 0.7},
+        #                       hue_order= ['PD','2C','Failure PD','Failure 2C'])
+        #         plt.savefig('paper_figures/{}.png'.format(name_plot), dpi=600)
+                
+        #         plt.tight_layout()
+        #         plt.show()
+        #         # plt.title("Climatic variables for each scenario")
         
         # ONLY FAILURES
         print("FOR FAILURES ONLY: \n")
@@ -1004,242 +1385,593 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         print("Ratio between 2C and PD permuted joint occurrences",len(df_features_ec_fail_season_2C_permuted)/len(df_features_ec_fail_season_PD_permuted))
             
         # Plot graphs comparing the difference between 2C and PD
-        for (df_features_ec_season_1,df_features_ec_2C_season_1, case) in zip([
-                df_features_ec_fail_season_PD, df_features_ec_fail_season_PD_permuted],
-                [df_features_ec_fail_season_2C, df_features_ec_fail_season_2C_permuted],
-                ['ord','perm']):
+        # for (df_features_ec_season_1,df_features_ec_2C_season_1, case) in zip([
+        #         df_features_ec_fail_season_PD, df_features_ec_fail_season_PD_permuted],
+        #         [df_features_ec_fail_season_2C, df_features_ec_fail_season_2C_permuted],
+        #         ['ord','perm']):
             
-            df_features_ec_season_fail_PD =pd.concat([
-                df_features_ec_season_1,pd.DataFrame(np.zeros(len(df_features_ec_season_1) ).T,
-                                                     index=df_features_ec_season_1.index, columns=['Scenario'])],axis=1)
-            df_features_ec_season_fail_PD['Scenario'] = 'Present day'
+        #     df_features_ec_season_fail_PD =pd.concat([
+        #         df_features_ec_season_1,pd.DataFrame(np.zeros(len(df_features_ec_season_1) ).T,
+        #                                              index=df_features_ec_season_1.index, columns=['Scenario'])],axis=1)
+        #     df_features_ec_season_fail_PD['Scenario'] = 'Present day'
             
-            df_features_ec_season_fail_2C =pd.concat([
-                df_features_ec_2C_season_1,pd.DataFrame(np.ones(len(df_features_ec_2C_season_1) ).T,
-                                                        index=df_features_ec_2C_season_1.index, columns=['Scenario'])],axis=1)
-            df_features_ec_season_fail_2C['Scenario'] = '2C'
+        #     df_features_ec_season_fail_2C =pd.concat([
+        #         df_features_ec_2C_season_1,pd.DataFrame(np.ones(len(df_features_ec_2C_season_1) ).T,
+        #                                                 index=df_features_ec_2C_season_1.index, columns=['Scenario'])],axis=1)
+        #     df_features_ec_season_fail_2C['Scenario'] = '2C'
             
-            df_features_ec_season_scenarios = pd.concat([
-                df_features_ec_season_fail_PD,df_features_ec_season_fail_2C], axis= 0)
+        #     df_features_ec_season_scenarios = pd.concat([
+        #         df_features_ec_season_fail_PD,df_features_ec_season_fail_2C], axis= 0)
             
-            for (y_axis, x_axis) in zip([0,0],[2,1]):
-                if case == 'ord':
-                    name_plot = "plot_ord_fail_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
-                elif case == 'perm':
-                    name_plot = "plot_perm_fail_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
+        #     for (y_axis, x_axis) in zip([0,0],[2,1]):
+        #         if case == 'ord':
+        #             name_plot = "plot_ord_fail_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
+        #         elif case == 'perm':
+        #             name_plot = "plot_perm_fail_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
                 
-                # sns.lmplot(data=df_features_ec_season_scenarios, y=df_features_ec_season.columns[y_axis], 
-                #            x=df_features_ec_season.columns[x_axis],fit_reg=True, 
-                #            scatter_kws={"s": 10}, hue='Scenario',legend_out=False)
-                # plt.title("Climatic variables for each scenario")
+        #         # sns.lmplot(data=df_features_ec_season_scenarios, y=df_features_ec_season.columns[y_axis], 
+        #         #            x=df_features_ec_season.columns[x_axis],fit_reg=True, 
+        #         #            scatter_kws={"s": 10}, hue='Scenario',legend_out=False)
+        #         # plt.title("Climatic variables for each scenario")
                 
-                sns.jointplot(data=df_features_ec_season_scenarios, y=df_features_ec_season.columns[y_axis],
-                              x=df_features_ec_season.columns[x_axis], kind="kde",
-                              hue='Scenario',fill=True, joint_kws={'alpha': 0.7})    
-                plt.savefig('paper_figures/{}.png'.format(name_plot), dpi=150)
-                plt.show()
-                # plt.title("Climatic variables for each scenario")
+        #         plt.figure(figsize = (5,5),dpi=500)
+        #         sns.jointplot(data=df_features_ec_season_scenarios, y=df_features_ec_season.columns[y_axis],
+        #                       x=df_features_ec_season.columns[x_axis], kind="kde",
+        #                       hue='Scenario',fill=True, joint_kws={'alpha': 0.7})    
+        #         plt.savefig('paper_figures/{}.png'.format(name_plot), dpi=500)
+        #         plt.show()
+        #         # plt.title("Climatic variables for each scenario")
+                
+        
+   
+        # fig_fail = plot_climatic_distributions(df_features_ec_fail_season_PD, df_features_ec_fail_season_2C)
+        
         
         # Table with occurrences of similar extreme values to 2012
         table_JO_prob2012 = pd.DataFrame([[JO_fail_2012_obs,JO_fail_2012_obs_2C],
                                               [JO_fail_2012_perm,JO_fail_2012_perm_2C]], 
                                              columns = ['PD','2C'], index = ['Ord.','Perm.'])
+        
+        plt.rcParams['axes.spines.right'] = False
+        plt.rcParams['axes.spines.top'] = False
+        
+        labels = df_joint_or_rf.columns[0:4]
+        and_values =df_joint_or_rf.iloc[0,:4]/2000
+        rf_values = df_joint_or_rf.iloc[1,:4]/2000
+        or_values = df_joint_or_rf.iloc[2,:4]/2000
+               
+        x = np.arange(len(labels))  # the label locations
+        width = 0.75  # the width of the bars
+        
+        fig, (ax1, ax2) = plt.subplots(1,2, figsize=(10, 5), dpi=500)
+        custom_ylim = (0, 1)
+
+        # Setting the values for all axes.
+        plt.setp(ax1, ylim=custom_ylim)
+        plt.setp(ax2, ylim=custom_ylim)
+        ax1.scatter(labels[0:2], and_values[0:2], label='AND')
+        ax1.scatter(labels[0:2], or_values[0:2], label='OR')
+        ax1.scatter(labels[0:2], rf_values[0:2], label='RF', marker = 's')
+        ax1.axhline(0.11, color = 'k',  linestyle=(0, (5, 5)), label = 'True ratio')
+        ax1.set_ylabel('Failure ratio')
+        ax1.legend()
+        
+        ax2.scatter(labels[2:4], and_values[2:4], label='AND')
+        ax2.scatter(labels[2:4], or_values[2:4], label='OR')
+        ax2.scatter(labels[2:4], rf_values[2:4], label='RF', marker = 's')
+        # ax2.axhline(0.11, color = 'k',  linestyle=(0, (5, 5)), label = 'True ratio')
+        
+        fig.tight_layout()
+        # fig.savefig('paper_figures/bar_scen_us.png', format='png', dpi=500)
+        plt.show()
+       
+        # print results        
         print(df_joint_or_rf)
         print(table_JO_prob2012) 
         return df_joint_or_rf, table_JO_prob2012
 
-
-#%%  compound analysis
-def return_period_storyline(df_features_ec_season, df_features_ec_2C_season, df_jo_2012, brf_model, df_clim_2012): #df_features_ec_3C_season = None 
-    """
-    Return period graph generation accounting for storyline joint occurrence values
-    
-    Parameters: 
-    brf_model: the machine learning model trained for the area;
-    df_features_ec_season: climatic features (processed by previous function)
-    df_features_ec_season_2C = climatic features for future period
-    df_clim_2012 = climatic variables for 2012 season
-       
-    Returns: 
-    Return period plot with storyline years .
+ #%% Compound analysis 3C
+    if df_features_ec_2C_season is not None and df_features_ec_3C_season is not None:
         
-    Created on Wed Feb 10 17:19:09 2021 
-    by @HenriqueGoulart
-    """
-    # Predictions for Observed data PD
-    thresholds=range(0,101,1)
-    y_pred_2012 = brf_model.predict_proba(df_clim_2012.values.reshape(1, -1))[0][1]
-    def predictions(brf_model,df_features_ec_season):
+        # PERMUTATION 2C
+        df_features_ec_2C_season_permuted = df_features_ec_2C_season.apply(np.random.RandomState(seed=1).permutation, axis=0)  
         
-        y_pred = brf_model.predict(df_features_ec_season)
-        score_prc = sum(y_pred)/len(y_pred) 
-        print("\n The total failures are:", sum(y_pred),
-              " And the ratio of failure seasons by total seasons is:", score_prc, "\n")     
-        probs = brf_model.predict_proba(df_features_ec_season)        
-        if df_clim_2012 is not None:
-            limit_2012 = y_pred_2012
-        else: 
-            limit_2012 = 0.95
-        seasons_over_2012 = df_features_ec_season[probs[:,1]>=limit_2012]
-        print(f"\n Number of {limit_2012}% events: {len(seasons_over_2012)} and mean conditions are:", 
-              np.mean(seasons_over_2012))
+        # Predictions for 2C and permuted 2C
+        y_pred_2C = brf_model.predict(df_features_ec_2C_season)
+        y_pred_2C_perm = brf_model.predict(df_features_ec_2C_season_permuted)
+        # mean conditions 2C
+        dif_mean =  np.median( df_features_ec_2C_season[y_pred_2C == 1] , axis=0) - np.median( df_features_ec_season[y_pred == 1] , axis=0)
+        print("Median conditions Failures 2C - PD is: \n", dif_mean)
+        # climate data original structure and permuted joint analysis
+        print("2C ----------------------")
+        fail_joint_obs_2C, fail_or_obs_2C, JO_fail_2012_obs_2C = compound_analysis(df_features_ec_2C_season,y_pred_2C)
+        print("2C permuted ---------------------")
+        fail_joint_perm_2C, fail_or_perm_2C, JO_fail_2012_perm_2C = compound_analysis(df_features_ec_2C_season_permuted, y_pred_2C_perm)
         
-        return y_pred, score_prc, probs, seasons_over_2012
-    
-    def return_period(df, colname):
-
-        # Sort data smallest to largest
-        sorted_data = df.sort_values(by=colname)
-        # Count total obervations
-        n = sorted_data.shape[0]      
-        # Add a numbered column 1 -> n to use in return calculation for rank
-        sorted_data.insert(0, 'rank', range(1, 1 + n))        
-        # Calculate probability
-        sorted_data["probability"] = (n - sorted_data["rank"] + 1) / (n + 1)        
-        # Calculate return - yearly data, no need to further trnasform
-        sorted_data["return-years"] = (1 / sorted_data["probability"])
-    
-        return(sorted_data)
-    
-    def plot_probs_failure(probs, probs_perm):
         
-        # put them together in the same dataframe for plotting
-        probs_agg=pd.DataFrame( [probs[:,1],probs_perm[:,1]]).T
-        probs_agg.columns=['Ordered','Permuted']
-    
-        # plots comparing prediction confidence for obs and perumuted
-        probs_agg_melt = probs_agg.melt(value_name='Failure probability').assign(data='Density')
+        # PERMUTATION 3C
+        df_features_ec_3C_season_permuted = df_features_ec_3C_season.apply(np.random.RandomState(seed=1).permutation, axis=0)  
         
-        # Compare the number of cases above a failure threshold
-        fails_prob_together = np.empty([len(thresholds),2])
-        i=0
-        for prc in thresholds: 
-            # print(f'The number of observed seasons with failure probability over {prc}% is:', 
-            #       len(probs[:,1][probs[:,1]>prc/100]), 'and permuted is: ',
-            #       len(probs_perm[:,1][probs_perm[:,1]>prc/100]))
+        # Predictions for 3C and permuted 2C
+        y_pred_3C = brf_model.predict(df_features_ec_3C_season)
+        y_pred_3C_perm = brf_model.predict(df_features_ec_3C_season_permuted)       
+        # mean conditions 3C
+        dif_mean3C =  np.median( df_features_ec_3C_season[y_pred_3C == 1] , axis=0) - np.median( df_features_ec_season[y_pred == 1] , axis=0)
+        print("Median conditions Failures 3C - PD is: \n", dif_mean3C)
+        # climate data original structure and permuted joint analysis
+        print("3C ----------------------")
+        fail_joint_obs_3C, fail_or_obs_3C, JO_fail_2012_obs_3C = compound_analysis(df_features_ec_3C_season,y_pred_3C)
+        print("3C permuted ---------------------")
+        fail_joint_perm_3C, fail_or_perm_3C, JO_fail_2012_perm_3C = compound_analysis(df_features_ec_3C_season_permuted, y_pred_3C_perm)
+        
+        # Amount of times more frequent 
+        print("\n Final comparisons: \n")
+        print("Ratio between PD correlated and permuted joint occurrences is",fail_joint_obs/fail_joint_perm)
+        print("Ratio between 2C correlated and permuted joint occurrences is",fail_joint_obs_2C/fail_joint_perm_2C)
+        print("Ratio between 3C correlated and permuted joint occurrences is",fail_joint_obs_3C/fail_joint_perm_3C)
+        print("Ratio between 2C and PD original joint occurrences",fail_joint_obs_2C/fail_joint_obs)
+        print("Ratio between 3C and PD original joint occurrences",fail_joint_obs_3C/fail_joint_obs)
+        print("Ratio between 2C and PD permuted joint occurrences",fail_joint_perm_2C/fail_joint_perm)
+        print("Ratio between 3C and PD permuted joint occurrences",fail_joint_perm_3C/fail_joint_perm)
+        
+        
+        # Table with all values indicating joint, univariate cases and predicted values
+        scenario_columns = ['PD','PD perm','2C','2C perm', '3C','3C perm']
+        scenario_index = ['Joint (and)', 'RF', 'Joint + univariate (or)']
+        df_joint =  pd.DataFrame([[fail_joint_obs, fail_joint_perm, fail_joint_obs_2C, fail_joint_perm_2C, fail_joint_obs_3C, fail_joint_perm_3C]],
+                                 columns = scenario_columns)
+        df_or =  pd.DataFrame([[fail_or_obs, fail_or_perm, fail_or_obs_2C, fail_or_perm_2C, fail_or_obs_3C, fail_or_perm_3C]], 
+                              columns = scenario_columns)
+        df_rf = pd.DataFrame([[sum(y_pred), sum(y_pred_perm), sum(y_pred_2C), sum(y_pred_2C_perm), sum(y_pred_3C), sum(y_pred_3C_perm)]], 
+                             columns = scenario_columns)
+        
+        df_joint_or_rf = pd.DataFrame(pd.concat([df_joint, df_rf, df_or], axis = 0))
+        df_joint_or_rf.index = scenario_index
+        df_joint_or_rf['PD/ PD perm']= df_joint_or_rf['PD']/df_joint_or_rf['PD perm']
+        df_joint_or_rf['2C/ 2C perm'] = df_joint_or_rf['2C']/df_joint_or_rf['2C perm']
+        df_joint_or_rf['3C/ 3C perm'] = df_joint_or_rf['3C']/df_joint_or_rf['3C perm']
+        
+        
+        # Function for plot creation with climatic variables distribution
+        def plot_climatic_distributions(df_features_ec_season_1, df_features_ec_2C_season_1, df_features_ec_3C_season_1, case = 'ord', 
+                                        y_axis = 0, x_axis=2, title_fig = 'Temperature and precipitation', leg = True):
             
-            fails_prob_together[i,:] = (len(probs[:,1][probs[:,1]>prc/100]),
-                                        len(probs_perm[:,1][probs_perm[:,1]>prc/100]))
-            i=i+1
-        
-        # Create dataframe with all failure probabilities for ordered and permuted cases
-        df_fails_prob_together = pd.DataFrame( fails_prob_together, index = thresholds, 
-                                              columns = probs_agg.columns)
-         
-        sorted_probs = return_period(probs_agg, 'Ordered')
-
-        return probs_agg, sorted_probs
-    
-    # PERMUTATION ---------- Preliminary analysis shows that precipitation is such an important variable that it alone can predict a good amount of the failures, irrespective of the other variables
-    df_features_ec_season_permuted = df_features_ec_season.apply(np.random.RandomState(seed=1).permutation, axis=0)    
-        
-    # predictions for observed data PD
-    y_pred, score_prc, probs, seasons_over_2012 = predictions(brf_model, df_features_ec_season)
-    
-    # Predictions for permuted
-    y_pred_perm, score_prc_perm, probs_perm, seasons_over_2012_perm = predictions(brf_model,df_features_ec_season_permuted)
-
-    # PERMUTATION ---------- Preliminary analysis shows that precipitation is such an important variable that it alone can predict a good amount of the failures, irrespective of the other variables
-    df_features_ec_2C_season_permuted = df_features_ec_2C_season.apply(np.random.RandomState(seed=1).permutation, axis=0)    
-    
-    # predictions for observed data PD
-    y_pred_2C, score_prc_2C, probs_2C, seasons_over_2012_2C = predictions(brf_model, df_features_ec_2C_season)
-    
-    # Predictions for permuted
-    y_pred_2C_perm, score_prc_perm_2C, probs_perm_2C, seasons_over_2012_perm_2C = predictions(brf_model, df_features_ec_2C_season_permuted)
+            df_features_ec_season_fail_PD =pd.concat([
+                df_features_ec_season_1,
+                pd.DataFrame(np.array([y_pred < -1]).T, index=df_features_ec_season_1.index, columns=['Scenario'])],axis=1)
+            
+            df_features_ec_season_fail_PD['Scenario'] = 'PD'
+            df_features_ec_season_fail_PD['Scenario'][y_pred == 1] = 'Failure PD'
+            
+            df_features_ec_season_fail_2C =pd.concat([
+                df_features_ec_2C_season_1,
+                pd.DataFrame(np.array([y_pred_2C > -1 ]).T, index=df_features_ec_2C_season_1.index,columns=['Scenario'])],axis=1)
+            
+            df_features_ec_season_fail_2C['Scenario'] = '2C'
+            df_features_ec_season_fail_2C['Scenario'][y_pred_2C == 1] = 'Failure 2C'
+            
+            df_features_ec_season_fail_3C =pd.concat([
+                df_features_ec_3C_season_1,
+                pd.DataFrame(np.array([y_pred_3C > -1 ]).T, index=df_features_ec_3C_season_1.index,columns=['Scenario'])],axis=1)
+            
+            df_features_ec_season_fail_3C['Scenario'] = '3C'
+            df_features_ec_season_fail_3C['Scenario'][y_pred_3C == 1] = 'Failure 3C'
+                                  
+            df_features_ec_season_scenarios = pd.concat([
+                df_features_ec_season_fail_PD, df_features_ec_season_fail_2C, df_features_ec_season_fail_3C], axis= 0)
+            
                 
-    # plots comparing prediction confidence for obs and perumuted
-    probs_agg,sorted_probs = plot_probs_failure(probs, probs_perm)
-       
-     # plots comparing prediction confidence for obs and perumuted
-    probs_agg_2C, sorted_probs_2C = plot_probs_failure(probs_2C, probs_perm_2C)
+            if case == 'ord':
+                name_plot = "plot_ord_3C_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
+            elif case == 'perm':
+                name_plot = "plot_perm_3C_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
             
-    # Return period for joint occurrence
-    JO_PD_rp = 2000/df_jo_2012.iloc[0,0]
-    JO_2C_rp = 2000/df_jo_2012.iloc[0,1]
-    RF_PD_rp = 2000/df_jo_2012.iloc[0,0]
-    JO_2C_rp = 2000/df_jo_2012.iloc[0,1]
-    print(df_jo_2012.iloc[0,0],df_jo_2012.iloc[0,1], JO_PD_rp, JO_2C_rp)
-    ### Plot comparing 2C and PD return periods
-    plt.figure(figsize=(6,6), dpi=150)
-    sns.scatterplot(data = sorted_probs, x=sorted_probs["return-years"], 
-                    y=sorted_probs["Ordered"], label='PD',linewidth=0 ) 
-    sns.scatterplot(data = sorted_probs_2C, x=sorted_probs_2C["return-years"], 
-                    y=sorted_probs_2C["Ordered"], label = '2C',linewidth=0 )
-    
-    # closest_2012 = np.searchsorted(sorted_probs_2C['Ordered'], y_pred_2012, side='left')
-    # closest_2012 = sorted_probs_2C[sorted_probs_2C['rank']==closest_2012]
-    
-    plt.scatter(x=JO_PD_rp, y=y_pred_2012, label = 'JO 2012 PD', linewidth=1 )
-    plt.scatter(x=JO_2C_rp, y=y_pred_2012, label = 'JO 2012 2C', linewidth=1 )
+            plt.figure(figsize = (6,6),dpi=500)
+            p = sns.jointplot(data=df_features_ec_season_scenarios, y = df_features_ec_season.columns[y_axis],
+                          x=df_features_ec_season.columns[x_axis], kind="kde", ratio = 3, 
+                          palette=["#e0f3f8", "#91bfdb", "#4575b4", "#fee090","#fc8d59", "#d73027"],
+                          hue='Scenario', fill=True, joint_kws = {'alpha': 0.7},
+                          hue_order= ['PD','2C','3C', 'Failure PD', 'Failure 2C', 'Failure 3C'])
+            
+            p.fig.suptitle(title_fig)
+            if leg == False:
+                p.ax_joint.get_legend().remove()
+            # .set_bbox_to_anchor((1.6, 0.9))
+            plt.tight_layout()
+            # plt.subplots_adjust(hspace=0, wspace=0)
+            plt.savefig('paper_figures/{}.png'.format(name_plot), dpi=500)
+                # plt.show()
+                # plt.title("Climatic variables for each scenario")
+            pp_p = plt.gca()
+            return pp_p
+        
+        
+        # Function for plot creation with climatic variables distribution
+        def plot_climatic_distributions_bi(df_features_ec_season_1, df_features_ec_2C_season_1, y_pred_scen, case = 'ord', 
+                                        y_axis = 0, x_axis=2, title_fig = 'Temperature and precipitation', leg = True, scenario = '2C'):
+            
+            df_features_ec_season_fail_PD =pd.concat([
+                df_features_ec_season_1,
+                pd.DataFrame(np.array([y_pred < -1]).T, index=df_features_ec_season_1.index, columns=['Scenario'])],axis=1)
+            
+            
+            df_features_ec_season_fail_2C =pd.concat([
+                df_features_ec_2C_season_1,
+                pd.DataFrame(np.array([y_pred_scen > -1 ]).T, index=df_features_ec_2C_season_1.index,columns=['Scenario'])],axis=1)
+            
+            df_features_ec_season_fail_PD['Scenario'] = 'PD'
+            df_features_ec_season_fail_PD['Scenario'][y_pred == 1] = 'Failure PD'
+            
+            df_features_ec_season_fail_2C['Scenario'] = scenario
+            df_features_ec_season_fail_2C['Scenario'][y_pred_scen == 1] = f'Failure {scenario}'
+                        
+            df_features_ec_season_scenarios = pd.concat([
+                df_features_ec_season_fail_PD, df_features_ec_season_fail_2C], axis= 0)
+            
+                
+            if case == 'ord':
+                name_plot = "plot_ord_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
+            elif case == 'perm':
+                name_plot = "plot_perm_" + str(df_features_ec_season.columns[x_axis]) + str(df_features_ec_season.columns[y_axis]) 
+            
+            print(name_plot)
+            plt.figure(figsize = (6,6),dpi=500)
+            
+            p = sns.jointplot(data=df_features_ec_season_scenarios, y = df_features_ec_season.columns[y_axis],
+                          x=df_features_ec_season.columns[x_axis], kind="kde", ratio = 3, 
+                          palette=["#91bfdb", "#4575b4", "#fc8d59","#d73027"],
+                          hue='Scenario',fill=True, joint_kws = {'alpha': 0.7},
+                          hue_order= ['PD',scenario,'Failure PD',f'Failure {scenario}'])
+            
+            p.fig.suptitle(title_fig)
+            if leg == False:
+                p.ax_joint.get_legend().remove()
+            if str(df_features_ec_season.columns[y_axis]) == 'tmx_7_8':
+                   p.ax_joint.set_ylabel('tmx_7_8 (°C)')
+            if str(df_features_ec_season.columns[x_axis]) == 'precip_7_8':
+                   p.ax_joint.set_xlabel('precip_7_8 (mm/month)')
+            if str(df_features_ec_season.columns[x_axis]) == 'dtr_7_8':
+                   p.ax_joint.set_xlabel('dtr_7_8 (°C)')
+            # .set_bbox_to_anchor((1.6, 0.9))
+            plt.tight_layout()
+            # plt.subplots_adjust(hspace=0, wspace=0)
+            plt.savefig(f'paper_figures/{name_plot}_{scenario}_bi.png', dpi=500)
+                # plt.show()
+                # plt.title("Climatic variables for each scenario")
+            pp_p = plt.gca()
+            return pp_p
+        
+        
+        
+        fig_clim_pr = plot_climatic_distributions(df_features_ec_season, df_features_ec_2C_season, df_features_ec_3C_season,y_axis = 0, x_axis=2, title_fig = 'a) Temperature and precipitation', leg = True)
+        fig_clim_dtr = plot_climatic_distributions(df_features_ec_season, df_features_ec_2C_season,df_features_ec_3C_season, y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR', leg = False)
+        
+        fig_clim_pr_2C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_2C_season, y_pred_2C, y_axis = 0, x_axis=2, title_fig = 'a) Temperature and precipitation', leg = True)
+        fig_clim_dtr_2C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_2C_season, y_pred_2C, y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR', leg = False)
+        
+        fig_clim_pr_3C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_3C_season, y_pred_3C, y_axis = 0, x_axis=2, title_fig = 'a) Temperature and precipitation', leg = True, scenario = '3C')
+        fig_clim_dtr_3C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_3C_season, y_pred_3C, y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR', leg = False, scenario = '3C')
+        
+        
 
-    if y_pred_2012 is not None:
-        plt.axhline(y = y_pred_2012, linestyle = '--', color = 'k', label='2012')
-    plt.xscale('log')
-    plt.legend(loc="lower right")
-    plt.xlabel('years')
-    plt.ylabel('Failure probability')
-    plt.title("Confidence event and return period for PD and 2C")
-    plt.savefig('paper_figures/return_period_storyline.png', format='png', dpi=150)
-    plt.show()
-    
-    
-    ### Graph comparing ensemble PD for 100 years against 100 years CRU
-    
-    # Reshape to have 100 years each column
-    def return_year_ensemble(probs):
-        probs_ec_ensemble = np.reshape(probs[:,1], (100,20))
-        probs_ec_ensemble = pd.DataFrame(probs_ec_ensemble)
+        # Combine the two figures in one plot
+        import PIL
+        from PIL import Image
         
-        df_ordered = np.empty([100,20])
-        df_return_year = np.empty([100,20])
+        def image_creating(list_im, name='default_fig'):
+            
+            imgs = [ PIL.Image.open(i) for i in list_im ]
+            
+            widths, heights = zip(*(i.size for i in imgs))
+            
+            total_width = sum(widths)
+            max_height = max(heights)
+            
+            new_im = Image.new('RGB', (total_width, max_height))
+            
+            x_offset = 0
+            for im in imgs:
+              new_im.paste(im, (x_offset,0))
+              x_offset += im.size[0]
+            
+            new_im.save(f'paper_figures/{name}.png')
+            
         
-        for i in list(probs_ec_ensemble.columns):
-            sorted_probs_ec_ensemble = return_period(probs_ec_ensemble, [i])
-            df_ordered[:,i] = sorted_probs_ec_ensemble[i]
-            df_return_year[:,i] = sorted_probs_ec_ensemble["return-years"]
+        list_im_comb = ['paper_figures/plot_ord_3C_precip_7_8tmx_7_8.png', 'paper_figures/plot_ord_3C_dtr_7_8tmx_7_8.png']
+        list_im_2C = ['paper_figures/plot_ord_precip_7_8tmx_7_8_2C_bi.png', 'paper_figures/plot_ord_dtr_7_8tmx_7_8_2C_bi.png']
+        list_im_3C = ['paper_figures/plot_ord_precip_7_8tmx_7_8_3C_bi.png', 'paper_figures/plot_ord_dtr_7_8tmx_7_8_3C_bi.png']
         
-        df_return_year = pd.DataFrame(df_return_year)
-        df_ordered = pd.DataFrame(df_ordered)
-        return df_ordered, df_return_year
-    
-    df_ordered_PD, df_return_year_PD = return_year_ensemble(probs)
-    df_ordered_2C, df_return_year_2C = return_year_ensemble(probs_2C)   
-    
+        image_creating(list_im_comb, name = 'plot_order_3C_clim_combine')
+        image_creating(list_im_2C, name = 'plot_order_2C_clim_combine_duo')
+        image_creating(list_im_3C, name = 'plot_order_3C_clim_combine_duo')
+            
+        
+            
+        # Storyline probability of failure 2012
+        y_pred_2012 = brf_model.predict_proba(df_clim_2012.values.reshape(1, -1))[0][1]
+        
+        probs_PD = brf_model.predict_proba(df_features_ec_season)  
+        probs_2C = brf_model.predict_proba(df_features_ec_2C_season)  
+        probs_3C = brf_model.predict_proba(df_features_ec_3C_season)  
+        
+        seasons_over_2012_PD = df_features_ec_season[probs_PD[:,1]>=y_pred_2012]
+        seasons_over_2012_PD['Scenario'] = 'PD'
+        
+        seasons_over_2012_2C = df_features_ec_2C_season[probs_2C[:,1] >= y_pred_2012]
+        seasons_over_2012_2C['Scenario'] = '2C'
+        
+        seasons_over_2012_3C = df_features_ec_3C_season[probs_3C[:,1]>=y_pred_2012]
+        seasons_over_2012_3C['Scenario'] = '3C'
+        
+        df_features_ec_season_2012_2C = pd.concat([
+                seasons_over_2012_PD, seasons_over_2012_2C], axis= 0)
+        print(df_features_ec_season_2012_2C)
+            
+        df_features_ec_season_2012_3C = pd.concat([
+                seasons_over_2012_PD, seasons_over_2012_3C], axis= 0)
+                    
+        def plot_climatic_2012(df_features_ec_season_2012, y_axis = 0, x_axis=2, title_fig = 'Temperature and precipitation', leg = True, scenario = '2C'):
+            
+            if scenario == '2C':
+                palette_chosen = ["#fee090","#fc8d59"]
+            elif scenario == '3C':
+                palette_chosen = ["#fee090","#d73027"]
+            
+            p = sns.jointplot(data=df_features_ec_season_2012, y = df_features_ec_season_2012.columns[y_axis],
+                                  x=df_features_ec_season_2012.columns[x_axis], kind="kde", 
+                                  palette=palette_chosen,
+                                  hue='Scenario',fill=True, joint_kws = {'alpha': 0.7},
+                                  hue_order= ['PD',scenario])
+                    
+            p.fig.suptitle(title_fig)
+            if leg == False:
+                p.ax_joint.get_legend().remove()
+            if str(df_features_ec_season.columns[y_axis]) == 'tmx_7_8':
+                   p.ax_joint.set_ylabel('tmx_7_8 (°C)')
+            if str(df_features_ec_season.columns[x_axis]) == 'precip_7_8':
+                   p.ax_joint.set_xlabel('precip_7_8 (mm/month)')
+            if str(df_features_ec_season.columns[x_axis]) == 'dtr_7_8':
+                   p.ax_joint.set_xlabel('dtr_7_8 (°C)')
+            # .set_bbox_to_anchor((1.6, 0.9))
+            plt.tight_layout()
+        
+        fig_2012_2C_pr = plot_climatic_2012(df_features_ec_season_2012_2C,y_axis = 0, x_axis=2, title_fig = 'a) Temperature and precipitation', leg = True,  scenario = '2C')
+        fig_2012_2C_dtr = plot_climatic_2012(df_features_ec_season_2012_2C, y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR', leg = False,  scenario = '2C')
+                
+        fig_2012_3C_pr = plot_climatic_2012(df_features_ec_season_2012_3C,y_axis = 0, x_axis=2, title_fig = 'c) Temperature and precipitation', leg = True,scenario = '3C')
+        fig_2012_3C_dtr = plot_climatic_2012(df_features_ec_season_2012_3C, y_axis = 0, x_axis=1, title_fig = 'd) Temperature and DTR', leg = False,scenario = '3C')
+                
+        # ONLY FAILURES
+        print("FOR FAILURES ONLY: \n")
+        df_features_ec_fail_season_PD = df_features_ec_season[y_pred == 1]      
+        df_features_ec_fail_season_2C = df_features_ec_2C_season[y_pred_2C == 1]
+        df_features_ec_fail_season_3C = df_features_ec_3C_season[y_pred_3C == 1]
 
-    # Statistics ensemble // If each obs needs to be ploted: # plt.scatter( x=df_return_year, y=df_ordered)
+        df_features_ec_fail_season_PD_permuted = df_features_ec_season_permuted[y_pred_perm == 1]
+        df_features_ec_fail_season_2C_permuted = df_features_ec_2C_season_permuted[y_pred_2C_perm == 1]     
+        df_features_ec_fail_season_3C_permuted = df_features_ec_3C_season_permuted[y_pred_3C_perm == 1]     
+        
+        # Amount of times more frequent 
+        print("\n Final comparisons for failures dataset: \n")
+        print("Ratio between correlated and permuted (PD) joint occurrences is", len(df_features_ec_fail_season_PD)/len(df_features_ec_fail_season_PD_permuted))
+        print("Ratio between correlated and permuted (2C) joint occurrences is",len(df_features_ec_fail_season_2C)/len(df_features_ec_fail_season_2C_permuted))
+        print("Ratio between correlated and permuted (3C) joint occurrences is",len(df_features_ec_fail_season_3C)/len(df_features_ec_fail_season_3C_permuted))
+        print("Ratio between 2C and PD correlated joint occurrences",len(df_features_ec_fail_season_2C)/len(df_features_ec_fail_season_PD))
+        print("Ratio between 2C and PD permuted joint occurrences",len(df_features_ec_fail_season_2C_permuted)/len(df_features_ec_fail_season_PD_permuted))
+        print("Ratio between 3C and PD correlated joint occurrences",len(df_features_ec_fail_season_3C)/len(df_features_ec_fail_season_PD))
+        print("Ratio between 3C and PD permuted joint occurrences",len(df_features_ec_fail_season_3C_permuted)/len(df_features_ec_fail_season_PD_permuted))
+                
+                
+        # Table with occurrences of similar extreme values to 2012
+        table_JO_prob2012 = pd.DataFrame([[JO_fail_2012_obs,JO_fail_2012_obs_2C, JO_fail_2012_obs_3C],
+                                              [JO_fail_2012_perm,JO_fail_2012_perm_2C, JO_fail_2012_perm_3C]], 
+                                             columns = ['PD','2C','3C'], index = ['Ord.','Perm.'])
+        
+        plt.rcParams['axes.spines.right'] = False
+        plt.rcParams['axes.spines.top'] = False
+        
+        labels = df_joint_or_rf.columns[0:4]
+        and_values =df_joint_or_rf.iloc[0,:4]/2000
+        rf_values = df_joint_or_rf.iloc[1,:4]/2000
+        or_values = df_joint_or_rf.iloc[2,:4]/2000
+               
+        x = np.arange(len(labels))  # the label locations
+        width = 0.75  # the width of the bars
+        
+        fig, (ax1, ax2) = plt.subplots(1,2, figsize=(10, 5), dpi=500)
+        custom_ylim = (0, 1)
+
+        # Setting the values for all axes.
+        plt.setp(ax1, ylim=custom_ylim)
+        plt.setp(ax2, ylim=custom_ylim)
+        ax1.scatter(labels[0:2], and_values[0:2], label='AND')
+        ax1.scatter(labels[0:2], or_values[0:2], label='OR')
+        ax1.scatter(labels[0:2], rf_values[0:2], label='RF', marker = 's')
+        ax1.axhline(0.11, color = 'k',  linestyle=(0, (5, 5)), label = 'True ratio')
+        ax1.set_ylabel('Failure ratio')
+        ax1.legend()
+        
+        ax2.scatter(labels[2:4], and_values[2:4], label='AND')
+        ax2.scatter(labels[2:4], or_values[2:4], label='OR')
+        ax2.scatter(labels[2:4], rf_values[2:4], label='RF', marker = 's')
+        # ax2.axhline(0.11, color = 'k',  linestyle=(0, (5, 5)), label = 'True ratio')
+        
+        fig.tight_layout()
+        # fig.savefig('paper_figures/bar_scen_us.png', format='png', dpi=500)
+        plt.show()
+       
+        # print results        
+        print(df_joint_or_rf)
+        print(table_JO_prob2012) 
+        
     
-    ord_mean = np.median(df_ordered_PD, axis=1)
-    ord_min = np.percentile(df_ordered_PD, 5, axis=1)
-    ord_max = np.percentile(df_ordered_PD, 95, axis=1)
-    
-    
-    ord_2C_min = np.percentile(df_ordered_2C, 5, axis=1)
-    ord_2C_max = np.percentile(df_ordered_2C, 95, axis=1)
-    ord_2C_mean = np.mean(df_ordered_2C, axis=1)
-    
-    
-    plt.figure(figsize=(6,6), dpi=150)
-    
-    plt.fill_between(df_return_year_PD[0], ord_min, ord_max,
-                     facecolor="blue", # The fill color
-                     color='blue',       # The outline color
-                     alpha=0.2, label= '5-95prc Ensemble PD')   
-    
-    plt.fill_between(df_return_year_2C[0], ord_2C_min, ord_2C_max,
-                     facecolor="orange", # The fill color
-                     color='orange',       # The outline color
-                     alpha=0.2, label= '5-95prc Ensemble 2C')        # Transparency of the fill
-    plt.scatter( x=df_return_year_PD[0], y=ord_mean,label = 'Median ensemble PD',)
-    plt.scatter( x=df_return_year_2C[0], y=ord_2C_mean,label = 'Median ensemble 2C',)
-    
-    plt.xscale('log')
-    plt.legend(loc="lower right")
-    plt.xlabel('years')
-    plt.ylabel('Failure probability')
-    plt.title("Confidence event and return period for PD and 2C")
-    plt.savefig('paper_figures/return_period_ensemble_2C_PD.png', format='png', dpi=150)
-    plt.show()
-    
-    
+        # Figure with 3 plots - Seasons exceeding 2012 conditions ########################################################
+        
+        tmx_2012_PD_analogues = sum(np.where((df_features_ec_season.iloc[:,0] >=  df_clim_2012.iloc[0]), 1, 0))
+        dtr_2012_PD_analogues = sum(np.where((df_features_ec_season.iloc[:,1] >=  df_clim_2012.iloc[1]), 1, 0))
+        precip_2012_PD_analogues = sum(np.where((df_features_ec_season.iloc[:,2] <=  df_clim_2012.iloc[2]), 1, 0))
+        
+        tmx_2012_2C_analogues = sum(np.where((df_features_ec_2C_season.iloc[:,0] >=  df_clim_2012.iloc[0]), 1, 0))
+        dtr_2012_2C_analogues = sum(np.where((df_features_ec_2C_season.iloc[:,1] >=  df_clim_2012.iloc[1]), 1, 0))
+        precip_2012_2C_analogues = sum(np.where((df_features_ec_2C_season.iloc[:,2] <=  df_clim_2012.iloc[2]), 1, 0))
+        
+        tmx_2012_3C_analogues = sum(np.where((df_features_ec_3C_season.iloc[:,0] >=  df_clim_2012.iloc[0]), 1, 0))
+        dtr_2012_3C_analogues = sum(np.where((df_features_ec_3C_season.iloc[:,1] >=  df_clim_2012.iloc[1]), 1, 0))
+        precip_2012_3C_analogues = sum(np.where((df_features_ec_3C_season.iloc[:,2] <=  df_clim_2012.iloc[2]), 1, 0))
+        
+        from matplotlib.patches import Circle, RegularPolygon
+        from matplotlib.path import Path
+        from matplotlib.projections.polar import PolarAxes
+        from matplotlib.projections import register_projection
+        from matplotlib.spines import Spine
+        from matplotlib.transforms import Affine2D
+        
+        def radar_factory(num_vars, frame='circle'):
+            """Create a radar chart with `num_vars` axes.
+        
+            This function creates a RadarAxes projection and registers it.
+        
+            Parameters
+            ----------
+            num_vars : int
+                Number of variables for radar chart.
+            frame : {'circle' | 'polygon'}
+                Shape of frame surrounding axes.
+        
+            """
+            # calculate evenly-spaced axis angles
+            theta = np.linspace(0, 2*np.pi, num_vars, endpoint=False)
+        
+            class RadarAxes(PolarAxes):
+        
+                name = 'radar'
+        
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, **kwargs)
+                    # rotate plot such that the first axis is at the top
+                    self.set_theta_zero_location('N')
+        
+                def fill(self, *args, closed=True, **kwargs):
+                    """Override fill so that line is closed by default"""
+                    return super().fill(closed=closed, *args, **kwargs)
+        
+                def plot(self, *args, **kwargs):
+                    """Override plot so that line is closed by default"""
+                    lines = super().plot(*args, **kwargs)
+                    for line in lines:
+                        self._close_line(line)
+        
+                def _close_line(self, line):
+                    x, y = line.get_data()
+                    # FIXME: markers at x[0], y[0] get doubled-up
+                    if x[0] != x[-1]:
+                        x = np.concatenate((x, [x[0]]))
+                        y = np.concatenate((y, [y[0]]))
+                        line.set_data(x, y)
+        
+                def set_varlabels(self, labels):
+                    self.set_thetagrids(np.degrees(theta), labels)
+        
+                def _gen_axes_patch(self):
+                    # The Axes patch must be centered at (0.5, 0.5) and of radius 0.5
+                    # in axes coordinates.
+                    if frame == 'circle':
+                        return Circle((0.5, 0.5), 0.5)
+                    elif frame == 'polygon':
+                        return RegularPolygon((0.5, 0.5), num_vars,
+                                              radius=.5, edgecolor="k")
+                    else:
+                        raise ValueError("unknown value for 'frame': %s" % frame)
+        
+                def draw(self, renderer):
+                    """ Draw. If frame is polygon, make gridlines polygon-shaped """
+                    if frame == 'polygon':
+                        gridlines = self.yaxis.get_gridlines()
+                        for gl in gridlines:
+                            gl.get_path()._interpolation_steps = num_vars
+                    super().draw(renderer)
+        
+        
+                def _gen_axes_spines(self):
+                    if frame == 'circle':
+                        return super()._gen_axes_spines()
+                    elif frame == 'polygon':
+                        # spine_type must be 'left'/'right'/'top'/'bottom'/'circle'.
+                        spine = Spine(axes=self,
+                                      spine_type='circle',
+                                      path=Path.unit_regular_polygon(num_vars))
+                        # unit_regular_polygon gives a polygon of radius 1 centered at
+                        # (0, 0) but we want a polygon of radius 0.5 centered at (0.5,
+                        # 0.5) in axes coordinates.
+                        spine.set_transform(Affine2D().scale(.5).translate(.5, .5)
+                                            + self.transAxes)
+        
+        
+                        return {'polar': spine}
+                    else:
+                        raise ValueError("unknown value for 'frame': %s" % frame)
+        
+            register_projection(RadarAxes)
+            return theta
+        
+        # Start figure
+        
+        # Subplot 1 - PD
+        data = [['Tmx', 'Dtr', 'Precip'], (f'e) PD scenario', [[tmx_2012_PD_analogues/2000, dtr_2012_PD_analogues/2000, precip_2012_PD_analogues/2000]])]     
+        N = len(data[0])
+        theta = radar_factory(N, frame='circle')
+        spoke_labels = data.pop(0)
+        title, case_data = data[0]
+        
+        fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(15, 5), dpi=500, subplot_kw=dict(projection='radar'))
+        fig.subplots_adjust(top=0.85, bottom=0.05)
+        
+        ax1.set_ylim(0,1)
+        ax1.set_rgrids([0, 500/2000, 1000/2000, 1500/2000, 2000/2000])
+        ax1.set_title(title,  position=(0.5, 1.1), ha='center')
+        
+        for d in case_data:
+            line = ax1.plot(theta, d)
+            ax1.fill(theta, d,  alpha=0.5)
+        ax1.set_varlabels(spoke_labels)
+        
+        # Subplot 2 - 2C
+        data = [['Tmx', 'Dtr', 'Precip'], (f'f) 2C scenario', [[tmx_2012_2C_analogues/2000, dtr_2012_2C_analogues/2000, precip_2012_2C_analogues/2000]])]     
+        N = len(data[0])
+        theta = radar_factory(N, frame='circle')
+        spoke_labels = data.pop(0)
+        title, case_data = data[0]
+        
+        ax2.set_ylim(0,1)
+        ax2.set_rgrids([0, 500/2000, 1000/2000, 1500/2000, 2000/2000])
+        ax2.set_title(title,  position=(0.5, 1.1), ha='center')
+        
+        for d in case_data:
+            line = ax2.plot(theta, d)
+            ax2.fill(theta, d,  alpha=0.5)
+        ax2.set_varlabels(spoke_labels)
+        
+        # Subplot 3 - 3C
+        data = [['Tmx', 'Dtr', 'Precip'], (f'g) 3C scenario', [[tmx_2012_3C_analogues/2000, dtr_2012_3C_analogues/2000, precip_2012_3C_analogues/2000]])]     
+        N = len(data[0])
+        theta = radar_factory(N, frame='circle')
+        spoke_labels = data.pop(0)
+        title, case_data = data[0]
+        
+        ax3.set_ylim(0,1)
+        ax3.set_rgrids([0, 500/2000, 1000/2000, 1500/2000, 2000/2000])
+        ax3.set_title(title,  position=(0.5, 1.1), ha='center')
+        
+        for d in case_data:
+            line = ax3.plot(theta, d)
+            ax3.fill(theta, d,  alpha=0.5)
+        ax3.set_varlabels(spoke_labels)
+        
+        # plt.tight_layout()    
+        fig.savefig('paper_figures/radar_2012.png', format='png', dpi=500)
+        
+        
+        
+        return df_joint_or_rf, table_JO_prob2012
+
     

@@ -22,7 +22,7 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
             Y_pred = linear_regressor.predict(df_cli2[feature].values.reshape(-1,1))
             score = format(linear_regressor.score(df_cli2[feature].values.reshape(-1,1), df_y_f),'.3f')
         # plot
-            plt.figure(figsize=(10,6), dpi=100)
+            plt.figure(figsize=(6,6), dpi=100)
             plt.scatter(df_cli2[feature], df_y_f, c='black')
             plt.title(f"R2 (0-1) score is {score}", fontsize=20)
             plt.xlabel(feature, fontsize=16)
@@ -42,30 +42,27 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
         print(sc_set.sort_values(by=['R2_score'], ascending=False)) 
     #%% Regularize/standard data
     #standardized
-    scaler=StandardScaler()
-    # df_cli2_scaled = pd.DataFrame(scaler.fit_transform(df_cli2), columns = df_cli2.columns, index=df_cli2.index)
     df_cli2_scaled = df_cli2
-    # # SPEI is already scaled, so it needs to be returned to its original form (could you confirm?)
-    # df_cli2_scaled[["spei6", "spei7", "spei8", "spei9", "spei10"]] = df_cli2[["spei6", "spei7", "spei8", "spei9", "spei10"]]
-    # df_t_scaled = pd.DataFrame(scaler.fit_transform(df_y_f),columns = df_y_f.columns, index=df_y_f.index)
     df_t_scaled = df_y_f
-    df_scaled = pd.concat([df_cli2_scaled,df_t_scaled], axis=1, sort=False)
+    df_scaled = pd.concat([df_cli2, df_y_f], axis=1, sort=False)
     
     #%% data input, output, train and test for classification
     #define failure
     # df_net =pd.DataFrame( np.where(df_t_scaled < -0,True, False), index = df_t_scaled.index,columns = ['net_loss'] ).astype(int)
-    df_severe =pd.DataFrame( np.where(df_t_scaled < df_t_scaled.mean()-df_t_scaled.std(),True, False), index = df_t_scaled.index,columns = ['severe_loss'] ).astype(int)
+    df_severe = pd.DataFrame( np.where(df_t_scaled < df_t_scaled.mean() - df_t_scaled.std(),True, False), 
+                             index = df_t_scaled.index, columns = ['severe_loss'] ).astype(int)
     loss_intensity = df_severe
     X, y = df_cli2_scaled, loss_intensity
     #divide data train and test
-    X_train, X_test, y_train, y_test = train_test_split(df_cli2_scaled, loss_intensity, test_size=0.3, random_state=0)
+    X_train, X_test, y_train, y_test = train_test_split(df_cli2_scaled, loss_intensity, test_size=0.2, random_state=0, stratify=y)
     
     #%% heatmap with the correlation of each feature + yield
     corrmat = df_scaled.corr()
     top_corr_features = corrmat.index
-    plt.figure(figsize = (7,7),dpi=144)
-    g = sns.heatmap(df_scaled[top_corr_features].corr(),annot=True, cmap="RdYlGn",vmin=-1, vmax=1)
-    plt.title("Pearson's correlation")
+    plt.figure(figsize = (8,8), dpi=250)
+    g = sns.heatmap(df_scaled[top_corr_features].corr(),annot=True, cmap="RdBu",vmin=-1, vmax=1, cbar = False)
+    plt.title("b)", loc = 'left', fontsize=20)
+    plt.tight_layout()
     plt.show()
 
     # # kendall Rank Correlation
@@ -109,7 +106,7 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
     print("Top Pearsons Correlations \n", get_top_abs_correlations(df_cli2_scaled, 5))
     # Kendall
     print("Top Kendalls Correlations \n", get_top_abs_correlations(df_cli2_scaled, 5, chosen_method = 'kendall'))
-    cor_support, cor_feature = cor_selector(df_cli2_scaled, df_t_scaled, 3)
+    cor_support, cor_feature = cor_selector(df_cli2_scaled, df_t_scaled, 5)
     print("\n The",str(len(cor_feature)), 'Pearsons most important features:', cor_feature)   
     
     #%% grid search - define quantity of features to be used - ANOVA
@@ -158,18 +155,20 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
     # feature selection
     X_train_fs, X_test_fs, fs = select_features(X_train, y_train.values.ravel(), X_test)
     
-    print("ANOVA most important features:",  X_train.iloc[:,np.argsort(fs.scores_)[-3:]].columns.tolist()[::-1])
+    print("ANOVA most important features:",  X_train.iloc[:,np.argsort(fs.scores_)[-7:]].columns.tolist()[::-1])
     #%% Chi 2 select k best    
     from sklearn.feature_selection import chi2
     import sklearn
     if len(X_train.columns) > 2:
         sample = 3
+    elif len(X_train.columns) > 4:
+        sample = 5
     else:
         sample = 2
     bestfeatures = SelectKBest(score_func=chi2, k=sample)
     fit_chi = bestfeatures.fit(sklearn.preprocessing.MinMaxScaler().fit_transform(X_train), y_train.values.ravel())
     
-    print("Chi-2 most important features:",X_train.iloc[:,np.argsort(fit_chi.scores_)[-3:]].columns.tolist()[::-1] )  #print 10 best features
+    print("Chi-2 most important features:",X_train.iloc[:,np.argsort(fit_chi.scores_)[-7:]].columns.tolist()[::-1] )  #print 10 best features
     #%% mutual information feature selection
     # feature selection
     def select_features_mutual(X_train, y_train, X_test):
@@ -186,7 +185,7 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
     # feature selection
     X_train_fs, X_test_fs, fs_mutual = select_features_mutual(X_train, y_train, X_test)
    
-    print("Mutual selection most important features:", X_train.iloc[:,np.argsort(fs.scores_)[-3:]].columns.tolist()[::-1])
+    print("Mutual selection most important features:", X_train.iloc[:,np.argsort(fs_mutual.scores_)[-7:]].columns.tolist()[::-1])
     #%%
     from sklearn.model_selection import RepeatedStratifiedKFold
     from sklearn.feature_selection import RFE
@@ -235,29 +234,30 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
     #%% random forest feature selection
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.tree import DecisionTreeClassifier
-    rfc = RandomForestClassifier(random_state=0)
+    rfc = RandomForestClassifier(n_estimators=600, random_state=0, n_jobs=-1,  
+                                        class_weight='balanced_subsample', max_depth = 10)
     # fit the model
     rfc.fit(X, y.values.ravel())
     # get importance
     importance = rfc.feature_importances_
     
-    print("random forest classifier most important features:", X_train.iloc[:,np.argsort(importance)[-3:]].columns.tolist()[::-1])
+    print("random forest classifier most important features:", X_train.iloc[:,np.argsort(importance)[-7:]].columns.tolist()[::-1])
     
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(9, 12), dpi=144)
-    fig.tight_layout()
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(7,10), dpi=500)
+    
     fig.subplots_adjust(hspace=.1)
     ax1.bar(X_train.columns, fs.scores_)
     ax1.set_xticklabels([])
-    ax1.set_title("ANOVA")
+    ax1.set_title("a) ANOVA")
     ax2.bar(X_train.columns, fs_mutual.scores_)
-    ax2.set_title("Mutual information")
+    ax2.set_title("b) Mutual information selection")
     ax2.set_xticklabels([])
     ax3.bar(X_train.columns, importance)
-    ax3.set_title("Random forest classification")
+    ax3.set_title("c) Random forest classifier")
     ax3.set_xticklabels([])
     ax4.bar(X_train.columns, fit_chi.scores_)
-    ax4.set_title("Chi-2")
-    
+    ax4.set_title("d) Chi-2")
+    fig.tight_layout()
     # fig.savefig('features_rank_bar.png', bbox_inches='tight')
 #%% Feature selection with all possible subsets
     if feat_sel == True:    
@@ -291,6 +291,7 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
         # report best
         print('Done!')
         print('Best subset: (%s) = %f' % (best_subset, best_score))
+    return g, fig
     
      
 
@@ -320,7 +321,7 @@ def failure_probability(df_cli2, df_y_f, config_hyperparameters = False, show_pa
     loss_intensity = df_severe
     X, y = df_cli2, loss_intensity
     #divide data train and test
-    X_train, X_test, y_train, y_test = train_test_split(df_cli2, loss_intensity, test_size=0.3, random_state=0)
+    X_train, X_test, y_train, y_test = train_test_split(df_cli2, loss_intensity, test_size=0.2, random_state=0, stratify=y)
 
     #define metric to minimize false negatives
     from sklearn.metrics import fbeta_score, make_scorer
@@ -332,9 +333,9 @@ def failure_probability(df_cli2, df_y_f, config_hyperparameters = False, show_pa
         
         
         # define models and parameters
-        model = RandomForestClassifier(random_state=0, n_jobs=-1, class_weight='balanced_subsample', max_depth = 7)
+        model = RandomForestClassifier(random_state=0, n_jobs=-1, class_weight='balanced_subsample', max_depth = 5)
         n_estimators = [100,500,600]
-        max_features = [3,4,5,6]
+        max_features = [1,2,3]
         # define grid search
         grid = dict(n_estimators=n_estimators,max_features=max_features)
         cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=3, random_state=0)
@@ -350,6 +351,8 @@ def failure_probability(df_cli2, df_y_f, config_hyperparameters = False, show_pa
         
     #%% ROC curve functions and plots
     from sklearn.metrics import confusion_matrix , plot_confusion_matrix, roc_auc_score,auc, roc_curve, precision_recall_curve, fbeta_score
+    from sklearn.metrics import accuracy_score, f1_score, fbeta_score, precision_score, recall_score
+
     def metrics_fun(X_test, y_test, y_pred, clf, n_features = 'all'):    
         # CONFUSION MATRIX TO ASSESS METRIC
         confusion_matrix(y_test, y_pred)
@@ -358,6 +361,11 @@ def failure_probability(df_cli2, df_y_f, config_hyperparameters = False, show_pa
         plt.title(f'Confusion matrix')
         plt.show()
         
+        # Basic scores
+        score_acc = accuracy_score(y_test, y_pred)
+        score_pcc = precision_score(y_test, y_pred)
+        score_rec = recall_score(y_test, y_pred)
+       
         #### ROC Curves
         # generate a no skill prediction (majority class)
         ns_probs = [0 for _ in range(len(y_test))]
@@ -400,7 +408,7 @@ def failure_probability(df_cli2, df_y_f, config_hyperparameters = False, show_pa
         plt.ylabel('Precision')
         plt.legend()
         plt.show()
-        return(lr_auc, lr_f1, lr_f2,lr_mcc)
+        return(score_acc, score_pcc, score_rec, lr_auc, lr_f1, lr_f2,lr_mcc)
         
     #%% Probabilistic failure  - weighted logistic regression
     # print("_____________________________________ \n Weighted Logistic Regression")
@@ -440,30 +448,35 @@ def failure_probability(df_cli2, df_y_f, config_hyperparameters = False, show_pa
     #%% random forest classifier
     print("_____________________________________ \n Random Forest")
     # all features
-    clf_rf_all = RandomForestClassifier(n_estimators=600, random_state=0, n_jobs=-1, class_weight='balanced_subsample', max_depth = 7).fit(X_train, y_train.values.ravel())
-    print(f"Training score:" , clf_rf_all.score(X_train, y_train.values.ravel()),"Test score:",clf_rf_all.score(X_test, y_test.values.ravel()))
+    clf_rf_all = RandomForestClassifier(n_estimators=600, random_state=0, n_jobs=-1,  
+                                        class_weight='balanced_subsample', max_depth = 10).fit(X_train, y_train.values.ravel())
 
     # evaluate the model
-    cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=6, random_state=0)
-    # n_scores = cross_val_score(clf_rf_all, X, y.values.ravel(), scoring='accuracy', cv=cv, n_jobs=-1, error_score='raise')
-    # # report performance
-    # print('CROSS VALIDATION SCORE (4 splits, 5 repeats): %.3f (%.3f) \n' % (np.mean(n_scores), np.std(n_scores)))
+    cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=5, random_state=0)
     
     # Predict
     y_pred = clf_rf_all.predict(X_test)
        
-    # assess additional scores    
-    lr_auc, lr_f1, lr_f2,lr_mcc = metrics_fun(X_test, y_test, y_pred, clf_rf_all)
+    # assess additional scores TEST
+    score_acc_rf, score_pcc_rf, score_rec_rf, lr_auc_rf, lr_f1_rf, lr_f2_rf, lr_mc_rfc = metrics_fun(
+        X_test, y_test, y_pred, clf_rf_all)
     
     scoring ={'acc':'accuracy','prc':'precision','rec':'recall', 'f1': 'f1','roc_auc':'roc_auc', 'f2': ftwo_scorer}  
     n_scores_new = cross_validate(clf_rf_all, X, y.values.ravel(), scoring=scoring, cv=cv, n_jobs=-1)
-    print(f"CROSS VALIDATION (5 splits, 6 repeats) SCORES:",
+    print(f"\n CROSS VALIDATION (5 splits, 6 repeats) SCORES:",
           "Accuracy test:", round(n_scores_new['test_acc'].mean(),2),
           "Precision test:", round(n_scores_new['test_prc'].mean(),2),
           "Recall test:", round(n_scores_new['test_rec'].mean(),2),
           "ROC_AUC test:", round(n_scores_new['test_roc_auc'].mean(),2),
           "f1 test:", round(n_scores_new['test_f1'].mean(),2),
           "f2 test:", round(n_scores_new['test_f2'].mean(),2))
+    print(f"\n TEST SCORES:",
+          "Accuracy test:", round(score_acc_rf,2),
+          "Precision test:", round(score_pcc_rf,2),
+          "Recall test:", round(score_rec_rf,2),
+          "f1 test:", round(lr_f1_rf,2),
+          "MCC test:", round(lr_mc_rfc,2))
+    rf_scores = score_acc_rf, score_pcc_rf, score_rec_rf, lr_f1_rf, lr_mc_rfc
     
     # #select most important ones
     # sel = SelectFromModel(RandomForestClassifier(n_estimators=1000, random_state=0))
@@ -505,117 +518,123 @@ def failure_probability(df_cli2, df_y_f, config_hyperparameters = False, show_pa
     [print('Variable: {:20} Importance: {}'.format(*pair)) for pair in feature_importances[0:5]];
     
     #%% BALANCED random forest classifier - Random undersampling of the majority class in reach bootstrap sample. 
-    from imblearn.ensemble import BalancedRandomForestClassifier       
-    print("_____________________________________ \n Balanced Random Forest")
+    # from imblearn.ensemble import BalancedRandomForestClassifier       
+    # print("_____________________________________ \n Balanced Random Forest")
     
-    # Model for calibration balanced random forest with parameters
-    clf_brf_all = BalancedRandomForestClassifier(n_estimators=600, random_state=0, n_jobs=-1, max_depth = 6, max_features = 'sqrt')
-    clf_brf_all.fit(X_train, y_train.values.ravel())
-    print(f"Training score:" , clf_brf_all.score(X_train, y_train.values.ravel()),"Test score:",clf_brf_all.score(X_test, y_test.values.ravel()))
+    # # Model for calibration balanced random forest with parameters
+    # clf_brf_all = BalancedRandomForestClassifier(n_estimators=600, random_state=0, n_jobs=-1, max_depth = 6, max_features = 'sqrt')
+    # clf_brf_all.fit(X_train, y_train.values.ravel())
+    # print(f"Training score:" , clf_brf_all.score(X_train, y_train.values.ravel()),"Test score:",clf_brf_all.score(X_test, y_test.values.ravel()))
          
-    # Predict
-    y_pred = clf_brf_all.predict(X_test)
+    # # Predict
+    # y_pred = clf_brf_all.predict(X_test)
     
-    #all    
-    lr_auc, lr_f1, lr_f2,lr_mcc = metrics_fun(X_test, y_test, y_pred, clf_brf_all)
+    # #all    
+    # score_acc, score_pcc, score_rec, lr_auc, lr_f1, lr_f2,lr_mcc = metrics_fun(X_test, y_test, y_pred, clf_brf_all)
 
-    # CROSS VALIDATION FOR MORE ROBUSTNESS
-    n_scores_new = cross_validate(clf_brf_all, X, y.values.ravel(), scoring=scoring, cv=cv, n_jobs=-1)
-    print("CROSS VALIDATION (5 splits, 6 repeats) SCORES:",
-          "Accuracy test:", round(n_scores_new['test_acc'].mean(),2),
-          "Precision test:", round(n_scores_new['test_prc'].mean(),2),
-          "Recall test:", round(n_scores_new['test_rec'].mean(),2),
-          "ROC_AUC test:", round(n_scores_new['test_roc_auc'].mean(),2),
-          "f1 test:", round(n_scores_new['test_f1'].mean(),2),
-          "f2 test:", round(n_scores_new['test_f2'].mean(),2))    
+    # # CROSS VALIDATION FOR MORE ROBUSTNESS
+    # n_scores_new = cross_validate(clf_brf_all, X, y.values.ravel(), scoring=scoring, cv=cv, n_jobs=-1)
+    # print("CROSS VALIDATION (5 splits, 6 repeats) SCORES:",
+    #       "Accuracy test:", round(n_scores_new['test_acc'].mean(),2),
+    #       "Precision test:", round(n_scores_new['test_prc'].mean(),2),
+    #       "Recall test:", round(n_scores_new['test_rec'].mean(),2),
+    #       "ROC_AUC test:", round(n_scores_new['test_roc_auc'].mean(),2),
+    #       "f1 test:", round(n_scores_new['test_f1'].mean(),2),
+    #       "f2 test:", round(n_scores_new['test_f2'].mean(),2))    
     
-    # #select most important ones
-    # sel = SelectFromModel(BalancedRandomForestClassifier(n_estimators=1000, random_state=0))
-    # sel.fit(X_train, y_train.values.ravel())
-    # selected_feat= X_train.columns[(sel.get_support())]
-    # print("\n Balanced Random Forest \n The selected features are",len(selected_feat), selected_feat.values)
-    # # transform
-    # X_train_selected = sel.transform(X_train)
-    # X_test_selected = sel.transform(X_test)
-    # # select features
-    # clf_brf = BalancedRandomForestClassifier(n_estimators=1000, random_state=0, n_jobs=-1, max_depth = 6).fit(X_train_selected, y_train.values.ravel())
-    # print(f"Selected features results: \n", f"{list(loss_intensity.columns.values)[0]} - selected training score is" , clf_brf.score(X_train_selected, y_train.values.ravel()))
-    # print(f"{list(loss_intensity.columns.values)[0]} - selected test score is" , clf_brf.score(X_test_selected, y_test.values.ravel()))
-    # y_pred_selected = clf_brf.predict(X_test_selected)
+    # # #select most important ones
+    # # sel = SelectFromModel(BalancedRandomForestClassifier(n_estimators=1000, random_state=0))
+    # # sel.fit(X_train, y_train.values.ravel())
+    # # selected_feat= X_train.columns[(sel.get_support())]
+    # # print("\n Balanced Random Forest \n The selected features are",len(selected_feat), selected_feat.values)
+    # # # transform
+    # # X_train_selected = sel.transform(X_train)
+    # # X_test_selected = sel.transform(X_test)
+    # # # select features
+    # # clf_brf = BalancedRandomForestClassifier(n_estimators=1000, random_state=0, n_jobs=-1, max_depth = 6).fit(X_train_selected, y_train.values.ravel())
+    # # print(f"Selected features results: \n", f"{list(loss_intensity.columns.values)[0]} - selected training score is" , clf_brf.score(X_train_selected, y_train.values.ravel()))
+    # # print(f"{list(loss_intensity.columns.values)[0]} - selected test score is" , clf_brf.score(X_test_selected, y_test.values.ravel()))
+    # # y_pred_selected = clf_brf.predict(X_test_selected)
     
-    #### plot the tree
-    from IPython.display import Image 
-    from sklearn.tree import export_graphviz
-    import pydot
-    # Pull out one tree from the forest
-    tree = clf_brf_all.estimators_[1]
-    feature_list = list(X_train.columns)
-    # Export the image to a dot file
-    export_graphviz(tree, out_file = 'tree.dot', feature_names = feature_list, rounded = True, precision = 1)
-    # Use dot file to create a graph
-    (graph, ) = pydot.graph_from_dot_file('tree.dot')
-    # Write graph to a png file
-    graph.write_png('tree_bal.png')
-    pil_img = Image(filename='tree_bal.png')
-    display(pil_img)
+    # #### plot the tree
+    # from IPython.display import Image 
+    # from sklearn.tree import export_graphviz
+    # import pydot
+    # # Pull out one tree from the forest
+    # tree = clf_brf_all.estimators_[1]
+    # feature_list = list(X_train.columns)
+    # # Export the image to a dot file
+    # export_graphviz(tree, out_file = 'tree.dot', feature_names = feature_list, rounded = True, precision = 1)
+    # # Use dot file to create a graph
+    # (graph, ) = pydot.graph_from_dot_file('tree.dot')
+    # # Write graph to a png file
+    # graph.write_png('tree_bal.png')
+    # pil_img = Image(filename='tree_bal.png')
+    # display(pil_img)
+        
+    # importances = list(clf_brf_all.feature_importances_)
+    # # List of tuples with variable and importance
+    # feature_importances = [(feature, round(importance, 2)) for feature, importance in zip(feature_list, importances)]
+    # # Sort the feature importances by most important first
+    # feature_importances = sorted(feature_importances, key = lambda x: x[1], reverse = True)
+    # [print('Variable: {:20} Importance: {}'.format(*pair)) for pair in feature_importances[0:5]];
+    # features_5_top= feature_importances[0:5]
+    # print("_____________________________________")
+    # print(feature_importances)
+  
     
-    feature_list = list(X_train.columns)
-    importances = list(clf_brf_all.feature_importances_)
-    # List of tuples with variable and importance
-    feature_importances = [(feature, round(importance, 2)) for feature, importance in zip(feature_list, importances)]
-    # Sort the feature importances by most important first
-    feature_importances = sorted(feature_importances, key = lambda x: x[1], reverse = True)
-    [print('Variable: {:20} Importance: {}'.format(*pair)) for pair in feature_importances[0:5]];
-    features_5_top= feature_importances[0:5]
-    print("_____________________________________")
-    
-    #%% Partial  dependence functions and plots
+     #%% Partial  dependence functions and plots
     if show_partial_plots == True:
         from sklearn.inspection import plot_partial_dependence
         from sklearn.experimental import enable_hist_gradient_boosting  # noqa
         from sklearn.ensemble import HistGradientBoostingClassifier
         
-        # X_sel = pd.DataFrame(X_train)
-        # X_sel.columns = selected_feat
         ppd_feat = [x[0] for x in feature_importances][0:3]
         print(ppd_feat)
-        est = BalancedRandomForestClassifier(n_estimators=100, random_state=0, n_jobs=-1, max_depth = 6).fit(X_train, y_train.values.ravel())
-        
-        # plot_duo = plot_partial_dependence(est, X_sel, [('tmx_7_8', 'precip_7_8')]) 
-       ###### plot_all = plot_partial_dependence(clf_brf_all, X_train, X_train.columns) 
-        
-        fig, (ax1) = plt.subplots(1, 1, figsize=(8, 4), dpi=150)
-        plot_sing = plot_partial_dependence(clf_rf_all, X_train, ppd_feat, n_jobs = -1,ax=ax1) 
+        est = RandomForestClassifier(n_estimators=100, random_state=0, n_jobs=-1, max_depth = 4).fit(X, y.values.ravel())
+                
+        fig, ax1 = plt.subplots(1, 1, figsize=(7, 4), dpi=500)
+        plot_sing_1 = plot_partial_dependence(clf_rf_all, X, ppd_feat, n_jobs = -1,ax=ax1) 
         fig.tight_layout()
         # plot_sing.plot()
-        ax1.set_title("Partial dependence of soybean failure probability for RF")
-        # fig.savefig('all_partial_plots_rbf.png', bbox_inches='tight')
+        # ax1.set_title("b) Partial dependence plots")
+        plot_sing_1.axes_[0][0].set_ylabel("Failure Probability")
+        fig.savefig('paper_figures/partial_plot_single.png', bbox_inches='tight')
         plt.show()
+ 
+        # # Second picture for RF 
+        # fig, (ax1) = plt.subplots(1, 1, figsize=(8, 4), dpi=500)
+        # fig.tight_layout()
+        # plot_sing_2 = plot_partial_dependence(est, X, ppd_feat, n_jobs = -1, ax=ax1) 
+        # ax1.set_title("Partial dependence of soybean failure probability for RF - simple")
+        # ax1.set_ylabel('Failure probability') 
+        # plt.show()
         
-        # Second picture for BRF 
-        fig, (ax1) = plt.subplots(1, 1, figsize=(8, 4), dpi=150)
-        fig.tight_layout()
-        plot_sing = plot_partial_dependence(est, X_train, ppd_feat, n_jobs = -1,ax=ax1) 
+        # # Second picture for BRF 
+        # fig, (ax1) = plt.subplots(1, 1, figsize=(8, 4), dpi=500)
+        # fig.tight_layout()
+        # plot_sing_brf = plot_partial_dependence(clf_brf_all, X, ppd_feat, n_jobs = -1,ax=ax1) 
+        # ax1.set_title("Partial dependence of soybean failure probability for BRF")
+        # plt.show()
 
-        # plot_sing.plot()
-        ax1.set_title("Partial dependence of soybean failure probability for BRF")
-        # fig.savefig('all_partial_plots_rbf.png', bbox_inches='tight')
-        plt.show()
-        ########### create the image
-        # fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 14), dpi=150)
-        # plot_sing.plot(ax=ax1)
-        # ax1.set_title("Partial dependence of soybean yield failure probability on features")
+        # # Plot duo
+        # plot_duo = plot_partial_dependence(clf_rf_all, X, [('tmx_7_8 (°C)', 'precip_7_8 (mm/month)')])         
+        # plt.show()
+        
+        # ########### create the image
+        # fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 8), dpi=500)
+        # plot_sing_1.plot(ax=ax1)
+        # ax1.set_title("a) Individual features")
         # plot_duo.plot(ax=ax2)
-        # ax2.set_title("Partial dependence of soybean yield failure probability on two features")
-        # fig.savefig('partial_plot.png', bbox_inches='tight')
-        # pil_img = Image(filename='partial_plot_rbf.png')
-        # display(pil_img)
+        # ax2.set_title("b) Compound: Precip_7_8 and Tmx_7_8")
+        # fig.tight_layout()
+        # fig.savefig('paper_figures/partial_plot_duo.png', bbox_inches='tight')
                      
     #%% Finalize Mahcine learning model and Return outputs function according to the type of model selected
     if model_choice == 'balanced':
         clf_brf_final = BalancedRandomForestClassifier(n_estimators=1000, random_state=0, n_jobs=-1, max_depth = 7, max_features = 'sqrt').fit(X, y.values.ravel())
     elif model_choice == 'conservative':
-        clf_brf_final = RandomForestClassifier(n_estimators=600, random_state=0, n_jobs=-1, 
+        clf_brf_final = RandomForestClassifier(n_estimators=1000, random_state=0, n_jobs=-1, 
                                                class_weight='balanced_subsample', max_depth = 7, max_features = 'sqrt').fit(X, y.values.ravel())
     
     # cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=6, random_state=0)
@@ -629,6 +648,6 @@ def failure_probability(df_cli2, df_y_f, config_hyperparameters = False, show_pa
     #       "f1 test:", round(n_scores_final['test_f1'].mean(),2),
     #       "f2 test:", round(n_scores_final['test_f2'].mean(),2))  
     
-    return(clf_brf_final)
+    return clf_brf_final, fig, rf_scores
 
 
