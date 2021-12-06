@@ -206,6 +206,16 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False, df_f
             mode = 'not_cor'
         elif cor == 'True':
             mode = 'correct'
+            
+        if obs_data.name == 'tmx':
+            feature_name = 'temperature'
+            
+        elif obs_data.name == 'dtr':
+            feature_name = 'DTR'
+        
+        elif obs_data.name == 'pre':
+            feature_name = 'precipitation'
+            
         # Compare mean annual cycle
         df_cru_year = df_cru_cli.groupby(df_cru_cli.index.month).mean()
         df_ec_year = df_ec.groupby(df_ec.index.month).mean()
@@ -214,7 +224,7 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False, df_f
         plt.plot(df_cru_year, label = 'CRU', color = 'darkblue')
         plt.plot(df_ec_year, label = 'EC-Earth', color = 'red' )
         plt.ylabel(obs_data.attrs['units'])
-        plt.title(f'Mean annual cycle - {obs_data.name} {level}') 
+        plt.title(f'Mean annual cycle - {feature_name} {level}') 
         plt.legend(loc="lower left")
         if save_figs == True:
             plt.savefig(f'paper_figures/bias_adj_mean_{mode}_{obs_data.name}_{level}.png', format='png', dpi=500)
@@ -228,7 +238,7 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False, df_f
         plt.plot(df_cru_year_std, label = 'CRU', color = 'darkblue')
         plt.plot(df_ec_year_std, label = 'EC-Earth', color = 'red' )
         plt.ylabel(obs_data.attrs['units'])
-        plt.title(f'Variability around the mean - {obs_data.name} {level}')
+        plt.title(f'Variability around the mean - {feature_name} {level}')
         plt.legend(loc="lower left")
         if save_figs == True:
             plt.savefig(f'paper_figures/bias_adj_std_{mode}_{obs_data.name}_{level}.png', format='png', dpi=500)    
@@ -244,7 +254,16 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False, df_f
         plt.show()
 
         
-    def bias_figure(model_data, model_data_cor, obs_data, scenario = 'PD'):      
+    def bias_figure(model_data, model_data_cor, obs_data, scenario = 'PD'):  
+       
+        if obs_data.name == 'tmx':
+            feature_name = 'temperature'
+            
+        elif obs_data.name == 'dtr':
+            feature_name = 'DTR'
+        
+        elif obs_data.name == 'pre':
+            feature_name = 'precipitation'
         
         df_ec = model_data[list(model_data.keys())[0]].to_dataframe().groupby(['time']).mean() # pandas because not spatially variable anymore
         df_ec_cor = model_data_cor[list(model_data_cor.keys())[0]].to_dataframe().groupby(['time']).mean() # pandas because not spatially variable anymore
@@ -261,7 +280,7 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False, df_f
             plt.plot(df_ec_year, label = 'EC-Earth original', color = 'darkblue' )
             plt.plot(df_ec_cor_year, label = 'EC-Earth corrected', color = 'red', linestyle = '--' )
             plt.ylabel(obs_data.attrs['units'])
-            plt.title(f'Mean annual cycle - {obs_data.name} bias correction') 
+            plt.title(f'Mean annual cycle - {feature_name} bias correction') 
             plt.legend(loc="lower left")
             if save_figs == True:
                 plt.savefig(f'paper_figures/bias_adj_mean_{obs_data.name}_all.png', format='png', dpi=500)
@@ -278,7 +297,7 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False, df_f
             plt.plot(df_ec_year, label = f'EC-Earth {scenario}', color = color_plot )
             plt.plot(df_ec_cor_year, label = 'EC-Earth PD', color = 'red', linestyle = '--' )
             plt.ylabel(obs_data.attrs['units'])
-            plt.title(f'Mean annual cycle - {obs_data.name} for {scenario}') 
+            plt.title(f'Mean annual cycle - {feature_name} for {scenario}') 
             plt.legend(loc="lower left")
             if save_figs == True:
                 plt.savefig(f'paper_figures/bias_adj_mean_{obs_data.name}_{scenario}_adjusted.png', format='png', dpi=500)
@@ -322,12 +341,15 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False, df_f
     letter = 'a)'
     for feature in list(DS_cli_ec.keys()):
         if feature == 'tmx':
+            feature_name = 'temperature'
             letter = 'a)'
             sel_kwargs={'label': '°C'}
         elif feature == 'dtr':
+            feature_name = 'DTR'
             letter = 'b)'
             sel_kwargs={'label': '°C'}
         elif feature == 'pre':
+            feature_name = 'precipitation'
             letter = 'c)' 
             sel_kwargs={'label': 'mm/month'}
                     
@@ -338,7 +360,7 @@ def bias_correction_masked(mask, start_date, end_date, cru_detrend = False, df_f
         subt_cor.plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True,levels=10, cbar_kwargs = sel_kwargs)
         ax.add_geometries(us1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
         ax.set_extent([-105,-65,20,50], ccrs.PlateCarree())
-        ax.set_title(f'{letter} Corrected bias for {feature}')
+        ax.set_title(f'{letter} Corrected bias for {feature_name}')
         plt.tight_layout()
         plt.show()
         
@@ -1587,7 +1609,7 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         
         
         # Function for plot creation with climatic variables distribution
-        def plot_climatic_distributions_bi(df_features_ec_season_1, df_features_ec_2C_season_1, y_pred_scen, case = 'ord', 
+        def plot_climatic_distributions_bi(df_features_ec_season_1, df_features_ec_2C_season_1, y_pred, y_pred_scen, case = 'ord', 
                                         y_axis = 0, x_axis=2, title_fig = 'Temperature and precipitation', leg = True, scenario = '2C'):
             
             df_features_ec_season_fail_PD =pd.concat([
@@ -1620,18 +1642,18 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
             p = sns.jointplot(data=df_features_ec_season_scenarios, y = df_features_ec_season.columns[y_axis],
                           x=df_features_ec_season.columns[x_axis], kind="kde", ratio = 3, 
                           palette=["#91bfdb", "#4575b4", "#fc8d59","#d73027"],
-                          hue='Scenario',fill=True, joint_kws = {'alpha': 0.7},
+                          hue='Scenario',fill=True, joint_kws = {'alpha': 0.9},
                           hue_order= ['PD',scenario,'Failure PD',f'Failure {scenario}'])
             
             p.fig.suptitle(title_fig)
             if leg == False:
                 p.ax_joint.get_legend().remove()
             if str(df_features_ec_season.columns[y_axis]) == 'tmx_7_8':
-                   p.ax_joint.set_ylabel('tmx_7_8 (°C)')
+                   p.ax_joint.set_ylabel('Temperature in July and August (°C)')
             if str(df_features_ec_season.columns[x_axis]) == 'precip_7_8':
-                   p.ax_joint.set_xlabel('precip_7_8 (mm/month)')
+                   p.ax_joint.set_xlabel('Precipitation in July and August (mm/month)')
             if str(df_features_ec_season.columns[x_axis]) == 'dtr_7_8':
-                   p.ax_joint.set_xlabel('dtr_7_8 (°C)')
+                   p.ax_joint.set_xlabel('DTR in July and August (°C)')
             # .set_bbox_to_anchor((1.6, 0.9))
             plt.tight_layout()
             # plt.subplots_adjust(hspace=0, wspace=0)
@@ -1644,15 +1666,17 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         
         
         fig_clim_pr = plot_climatic_distributions(df_features_ec_season, df_features_ec_2C_season, df_features_ec_3C_season,y_axis = 0, x_axis=2, title_fig = 'a) Temperature and precipitation', leg = True)
-        fig_clim_dtr = plot_climatic_distributions(df_features_ec_season, df_features_ec_2C_season,df_features_ec_3C_season, y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR', leg = False)
+        fig_clim_dtr = plot_climatic_distributions(df_features_ec_season, df_features_ec_2C_season, df_features_ec_3C_season, y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR', leg = False)
         
-        fig_clim_pr_2C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_2C_season, y_pred_2C, y_axis = 0, x_axis=2, title_fig = 'a) Temperature and precipitation', leg = True)
-        fig_clim_dtr_2C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_2C_season, y_pred_2C, y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR', leg = False)
+        fig_clim_pr_2C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_2C_season,y_pred, y_pred_2C, y_axis = 0, x_axis=2, title_fig = 'a) Temperature and precipitation', leg = True)
+        fig_clim_dtr_2C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_2C_season,y_pred, y_pred_2C, y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR', leg = False)
         
-        fig_clim_pr_3C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_3C_season, y_pred_3C, y_axis = 0, x_axis=2, title_fig = 'a) Temperature and precipitation', leg = True, scenario = '3C')
-        fig_clim_dtr_3C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_3C_season, y_pred_3C, y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR', leg = False, scenario = '3C')
+        fig_clim_pr_3C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_3C_season,y_pred, y_pred_3C, y_axis = 0, x_axis=2, title_fig = 'a) Temperature and precipitation', leg = True, scenario = '3C')
+        fig_clim_dtr_3C = plot_climatic_distributions_bi(df_features_ec_season, df_features_ec_3C_season,y_pred, y_pred_3C, y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR', leg = False, scenario = '3C')
         
-        
+        fig_clim_pr_3C_perm = plot_climatic_distributions_bi(df_features_ec_season_permuted, df_features_ec_3C_season_permuted,y_pred_perm, y_pred_3C_perm, case = 'perm', y_axis = 0, x_axis=2, title_fig = 'a) Temperature and precipitation permuted', leg = True, scenario = '3C')
+        fig_clim_dtr_3C_perm = plot_climatic_distributions_bi(df_features_ec_season_permuted, df_features_ec_3C_season_permuted, y_pred_perm, y_pred_3C_perm, case = 'perm', y_axis = 0, x_axis=1, title_fig = 'b) Temperature and DTR permuted', leg = False, scenario = '3C')
+    
 
         # Combine the two figures in one plot
         import PIL
@@ -1713,9 +1737,9 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         def plot_climatic_2012(df_features_ec_season_2012, y_axis = 0, x_axis=2, title_fig = 'Temperature and precipitation', leg = True, scenario = '2C'):
             
             if scenario == '2C':
-                palette_chosen = ["#fee090","#fc8d59"]
+                palette_chosen = ["#969696","#fc8d59"]
             elif scenario == '3C':
-                palette_chosen = ["#fee090","#d73027"]
+                palette_chosen = ["#969696","#d73027"]
             
             p = sns.jointplot(data=df_features_ec_season_2012, y = df_features_ec_season_2012.columns[y_axis],
                                   x=df_features_ec_season_2012.columns[x_axis], kind="kde", 
@@ -1727,11 +1751,11 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
             if leg == False:
                 p.ax_joint.get_legend().remove()
             if str(df_features_ec_season.columns[y_axis]) == 'tmx_7_8':
-                   p.ax_joint.set_ylabel('tmx_7_8 (°C)')
+                   p.ax_joint.set_ylabel('Temperature in July and August (°C)')
             if str(df_features_ec_season.columns[x_axis]) == 'precip_7_8':
-                   p.ax_joint.set_xlabel('precip_7_8 (mm/month)')
+                   p.ax_joint.set_xlabel('Precipitation in July and August (mm/month)')
             if str(df_features_ec_season.columns[x_axis]) == 'dtr_7_8':
-                   p.ax_joint.set_xlabel('dtr_7_8 (°C)')
+                   p.ax_joint.set_xlabel('DTR in July and August (°C)')
             # .set_bbox_to_anchor((1.6, 0.9))
             plt.tight_layout()
         
@@ -1917,7 +1941,7 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         # Start figure
         
         # Subplot 1 - PD
-        data = [['Tmx', 'Dtr', 'Precip'], (f'e) PD scenario', [[tmx_2012_PD_analogues/2000, dtr_2012_PD_analogues/2000, precip_2012_PD_analogues/2000]])]     
+        data = [['Temperature', 'DTR', 'Precipitation'], (f'a) PD scenario', [[tmx_2012_PD_analogues/2000, dtr_2012_PD_analogues/2000, precip_2012_PD_analogues/2000]])]     
         N = len(data[0])
         theta = radar_factory(N, frame='circle')
         spoke_labels = data.pop(0)
@@ -1936,7 +1960,7 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         ax1.set_varlabels(spoke_labels)
         
         # Subplot 2 - 2C
-        data = [['Tmx', 'Dtr', 'Precip'], (f'f) 2C scenario', [[tmx_2012_2C_analogues/2000, dtr_2012_2C_analogues/2000, precip_2012_2C_analogues/2000]])]     
+        data = [['Temperature', 'DTR', 'Precipitation'], (f'b) 2C scenario', [[tmx_2012_2C_analogues/2000, dtr_2012_2C_analogues/2000, precip_2012_2C_analogues/2000]])]     
         N = len(data[0])
         theta = radar_factory(N, frame='circle')
         spoke_labels = data.pop(0)
@@ -1952,7 +1976,7 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
         ax2.set_varlabels(spoke_labels)
         
         # Subplot 3 - 3C
-        data = [['Tmx', 'Dtr', 'Precip'], (f'g) 3C scenario', [[tmx_2012_3C_analogues/2000, dtr_2012_3C_analogues/2000, precip_2012_3C_analogues/2000]])]     
+        data = [['Temperature', 'DTR', 'Precipitation'], (f'c) 3C scenario', [[tmx_2012_3C_analogues/2000, dtr_2012_3C_analogues/2000, precip_2012_3C_analogues/2000]])]     
         N = len(data[0])
         theta = radar_factory(N, frame='circle')
         spoke_labels = data.pop(0)
@@ -1967,7 +1991,7 @@ def compound_exploration(brf_model, df_features_ec_season, df_features_ec_2C_sea
             ax3.fill(theta, d,  alpha=0.5)
         ax3.set_varlabels(spoke_labels)
         
-        # plt.tight_layout()    
+        plt.tight_layout()    
         fig.savefig('paper_figures/radar_2012.png', format='png', dpi=500)
         
         

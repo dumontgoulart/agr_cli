@@ -1,7 +1,7 @@
 import pandas as pd
 import xarray as xr
 # Load
-data = pd.read_csv('ACY_gswp3-w5e5_obsclim_default_soy_noirr.txt', sep=";")
+data = pd.read_csv('ACY_gswp3-w5e5_obsclim_2015soc_default_soy_noirr.txt', sep=";")
 # Reduction to raster format & conversion to standard labels
 data_red = data[["x","y","YR","YLDG"]]
 data_red = data_red.rename(columns={'x':'lon', 'y':'lat', "YR":"time", "YLDG":"yield"})
@@ -13,10 +13,10 @@ data_red_drop = data_red.drop_duplicates(subset=['time','lat','lon'])
 df_multiindex = data_red_drop.set_index(["lon","lat","time"])
 # Conversion to dataset / xarray, configure coordinates
 DS_gswp3 = df_multiindex.to_xarray()
-DS_gswp3 =DS_gswp3.transpose('time','lat','lon')
+DS_gswp3 = DS_gswp3.transpose('time','lat','lon')
 DS_gswp3["yield"].attrs = {'units': 't ha-1 yr-1', 'long_name': 'Yields', 'standard_name': 'yield'}
 # Save file in nc format
-DS_gswp3.to_netcdf('ACY_gswp3-w5e5_obsclim_default_soy_noirr.nc')
+DS_gswp3.to_netcdf('ACY_gswp3-w5e5_obsclim_2015soc_default_soy_noirr.nc')
 
 #%% Load ########################### MIRCA 2000 masks #####################################################
 data_rain = pd.read_csv('annual_area_harvested_rfc_crop08_ha_30mn.asc', header=None, skiprows=6, delimiter=' ')# skipinitialspace=True, index_col=0,

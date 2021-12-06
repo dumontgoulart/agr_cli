@@ -274,6 +274,9 @@ def return_period_storyline(df_features_ec_season, df_features_ec_2C_season, df_
     plt.show()
     
     
+    
+    
+    
     # Figure for compoundness #################################################
     fig, (ax1, ax2) = plt.subplots(1,2, figsize=(12, 6), dpi=500)
     
@@ -377,6 +380,7 @@ def return_period_storyline(df_features_ec_season, df_features_ec_2C_season, df_
         plt.tight_layout()
         plt.savefig('paper_figures/return_period_3C_ensemble_PD_perm.png', format='png', dpi=500)
         plt.show()
+        
         
         
     # Figure for compoundness with different methods #################################################
@@ -545,6 +549,41 @@ def return_period_storyline(df_features_ec_season, df_features_ec_2C_season, df_
     
     fig.tight_layout()
     plt.savefig('paper_figures/2012_analysis_clim.png', format='png', dpi=500)
+    plt.show()
+    
+    
+    plt.figure(figsize=(7,5), dpi=500)
+    f, axes = plt.subplots(1, 3)
+    sns.boxplot(y=seasons_over_2012_3C['tmx_7_8'].index, orient='v', data=seasons_over_2012_3C['tmx_7_8'], ax=axes[0])
+    sns.boxplot(y=seasons_over_2012_3C['dtr_7_8'].index, orient='v', data=seasons_over_2012_3C['dtr_7_8'], ax=axes[1]) #for green: 99d8c9
+    sns.boxplot(y=seasons_over_2012_3C['precip_7_8'].index, orient='v', data=seasons_over_2012_3C['precip_7_8'], ax=axes[2])
+    plt.show()
+    
+    
+    new_df = pd.melt(seasons_over_2012_3C)
+    
+    df_scatter_tmx = pd.DataFrame(df_clim_agg_chosen.loc[[2012],'tmx_7_8'])
+    df_scatter_tmx.rename(index={2012:'tmx_7_8'},inplace=True)
+    
+    df_scatter_dtr = pd.DataFrame(df_clim_agg_chosen.loc[[2012],'dtr_7_8'])
+    df_scatter_dtr.rename(index={2012:'dtr_7_8'},inplace=True)
+    
+    df_scatter_precip = pd.DataFrame(df_clim_agg_chosen.loc[[2012],'precip_7_8'])
+    df_scatter_precip.rename(index={2012:'precip_7_8'},inplace=True)
+    
+    plt.figure(figsize=(7,5), dpi=500)
+    f, axes = plt.subplots(1, 3)
+    sns.boxplot(data=new_df[new_df['variable']=='tmx_7_8'], y = 'value', x= 'variable', ax=axes[0])
+    sns.scatterplot(x = df_scatter_tmx.index, y = df_scatter_tmx['tmx_7_8'], s=200, color="red", ax=axes[0])
+    
+    sns.boxplot(data=new_df[new_df['variable']=='dtr_7_8'], y = 'value', x= 'variable', ax=axes[1])
+    sns.scatterplot(x = df_scatter_dtr.index, y = df_scatter_dtr['dtr_7_8'], s=200, color="red", ax=axes[1])
+    
+    sns.boxplot(data=new_df[new_df['variable']=='precip_7_8'], y = 'value', x= 'variable', ax=axes[2])
+    sns.scatterplot(x = df_scatter_precip.index, y = df_scatter_precip['precip_7_8'], s=200, color="red", ax=axes[2])
+    plt.tight_layout()
+    plt.show()
+
     
     return mean_conditions_similar_2012_2C, mean_conditions_similar_2012_3C
 

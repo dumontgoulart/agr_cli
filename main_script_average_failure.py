@@ -60,6 +60,7 @@ def reshape_data(dataarray):  #converts and reshape data
         dataframe = dataarray.dropna(how='all')
     else:    
         dataframe = dataarray.to_dataframe().dropna(how='all')
+        
     dataframe['month'] = dataframe.index.get_level_values('time').month
     dataframe['year'] = dataframe.index.get_level_values('time').year
     dataframe.set_index('month', append=True, inplace=True)
@@ -242,7 +243,7 @@ def conversion_clim_yield(DS_y, DS_cli_us, df_co2, months_to_be_used=[7,8], wate
     
     for feature in list(DS_cli_us.keys()):   
         test = DS_cli_us[feature].sel(time=DS_cli_us.time.dt.month.isin([months_to_be_used])).to_dataframe().groupby(['time']).mean()
-        test_reshape= reshape_data(test).loc[:,months_to_be_used]
+        test_reshape = reshape_data(test).loc[:,months_to_be_used]
         
         for i in test_reshape.columns:                     
             # plot trend and detrend
@@ -327,6 +328,8 @@ def bar_perf_train(df_perf_train_us, rf_values):
 
 # Create plots comparing climatic conditions of season and historical dataset
 def deviation_2012(df_clim_agg_chosen, df_clim_2012_us):
+    
+    df_clim_agg_chosen.columns = ['Temperature','DTR','Precipitation']
     
     dev_2012 = (df_clim_2012_us - df_clim_agg_chosen.mean(axis=0)) / df_clim_agg_chosen.std(axis=0, ddof=0)
     print(dev_2012)
@@ -457,22 +460,13 @@ plt.savefig('paper_figures/us_map_crop_yield.png', format='png', dpi=250)
 plt.show()
 
 
-# Import CO2 levels globally
+### Import CO2 levels globally
 DS_co2 = xr.open_dataset("ico2_annual_1901 2016.nc",decode_times=False)
 
 DS_co2['time'] = DS_ref.time
 DS_co2 = DS_co2.sel(time=slice(start_date, end_date))
 df_co2 = DS_co2.to_dataframe()
 
-# df_epic = DS_y.to_dataframe().groupby(['time']).mean() # pandas because not spatially variable anymore
-
-# # polynomial 
-# coeff = np.polyfit(df_co2.values.ravel(), df_epic.values, 2)
-# trend = np.polyval(coeff, df_co2.values.ravel())
-# df_epic_det =  pd.DataFrame( df_epic['yield'] - trend, index=df_epic.index, columns = df_epic.columns) + df_epic.mean() 
-# plt.plot(df_epic.index, df_epic_det, 'r-')
-# plt.plot(df_epic.index, trend, 'k')
-# plt.show()
 
 #%% load data - climate CRU
 DS_tmx = xr.open_dataset("EC_earth_PD/cru_ts4.04.1901.2019.tmx.dat_lr.nc",decode_times=True).sel(time=slice(start_date, end_date))
@@ -503,7 +497,7 @@ DS_frs_days = DS_frs_days.rename('frs')
 DS_frs_days.attrs["units"] = 'days'
 
 # Merge and mask - when using wet or frost days, add dt.days after DS['days'] ;;;;;;; DS_frs['frs'].dt.days,  
-DS_cli_all = xr.merge([DS_tmx.tmx, DS_tmp.tmp, DS_tmn.tmn, DS_dtr.dtr, DS_prec.precip, DS_wet_days,DS_frs_days, DS_vap.vap, DS_pet.pet, DS_cld.cld]) 
+DS_cli_all = xr.merge([DS_tmx.tmx, DS_tmp.tmp, DS_tmn.tmn, DS_dtr.dtr, DS_prec.precip, DS_wet_days, DS_vap.vap, DS_pet.pet, DS_cld.cld]) 
 DS_cli_all = conversion_lat_lon(DS_cli_all)
 # Masked after yield data
 DS_cli_all = DS_cli_all.where(DS_y['yield'].mean('time') > -0.1 )
@@ -567,14 +561,32 @@ Feature selection - time and meterological variables
 """
 
 # Feature selection
-df_clim_avg_features_all_us, df_epic_det_all_us = conversion_clim_yield(
+df_clim_avg_features_all_season_us, df_epic_det_all_us = conversion_clim_yield(
     DS_y, DS_cli_all,df_co2, months_to_be_used=[5,6,7,8,9,10], detrend = True)
+
+
+df_clim_features_selected_us, df_epic_det_all_us = conversion_clim_yield(
+    DS_y, DS_cli_all[['tmx','precip','dtr', 'pet']],df_co2, months_to_be_used=[5,6,7,8,9,10], detrend = True)
+
 
 df_clim_avg_features_all_us, df_epic_det_all_us = conversion_clim_yield(
     DS_y, DS_cli_all,df_co2, months_to_be_used=[7,8], detrend = True)
 
 # ML feature exploration, importance and selection if needed
-feature_importance_selection(df_clim_avg_features_all_us, df_epic_det_all_us)
+pearsons_cor = feature_importance_selection(df_clim_avg_features_all_season_us, df_epic_det_all_us)
+import calendar
+pearsons_cor['month'] =pearsons_cor.index
+pearsons_cor = pearsons_cor.assign(month = lambda x: x['month'].str.extract('(\d+)'))
+pearsons_cor['month'] = pd.to_numeric(pearsons_cor['month'], errors='coerce')
+pearsons_cor['month']=pearsons_cor['month'].apply(lambda x: calendar.month_abbr[x])
+
+sns.boxplot(data=pearsons_cor, x="month", y = "R2_score")
+plt.ylabel("R² Score")
+plt.xlabel("Months in growing season")
+plt.show()
+
+pearsons_cor_78 = feature_importance_selection(df_clim_avg_features_all_us, df_epic_det_all_us)
+pearsons_cor_red = feature_importance_selection(df_clim_features_selected_us, df_epic_det_all_us)
 
 # Main algorithm for training the ML model
 brf_model_month_us = failure_probability(df_clim_avg_features_all_us, df_epic_det_all_us, show_partial_plots= True, model_choice = 'conservative')
@@ -598,7 +610,7 @@ violin_us.savefig('paper_figures/violin_plots_all_us.png', format='png', dpi=300
 
 # ML feature exploration, importance and selection if needed
 df_clim_agg_features_all_us =  pd.concat([df_clim_agg_features_all_us.iloc[:,0:6],df_clim_agg_features_all_us.iloc[:,8:10]],axis=1)
-                                          
+                                              
 plot_corr, plot_feat_imp_all = feature_importance_selection(df_clim_agg_features_all_us, df_epic_det_all_us)
 plot_corr.figure.savefig('paper_figures/plot_cor_all_us.png', format='png', dpi=300)
 plot_feat_imp_all.savefig('paper_figures/feat_imp_all_us.png', format='png', dpi=300)
@@ -643,7 +655,7 @@ df_clim_agg_chosen.to_csv('rf_tuning/df_clim.csv')
 df_epic_det_us.to_csv('rf_tuning/df_yield.csv')
 
 # Main algorithm for training the ML model
-df_clim_agg_chosen.columns = ['tmx_7_8 (°C)','dtr_7_8 (°C)', 'precip_7_8 (mm/month)']
+df_clim_agg_chosen.columns = ['Temperature (°C)','DTR (°C)', 'Precipitation (mm/month)']
 brf_model_us, fig_dep_us, rf_scores_us = failure_probability(df_clim_agg_chosen, df_epic_det_us, show_partial_plots= True, model_choice = 'conservative')
 
 df_clim_agg_chosen.columns = ['tmx_7_8','dtr_7_8', 'precip_7_8']
@@ -687,7 +699,7 @@ single_plot_us.savefig('paper_figures/single_perf_train_us.png', format='png', d
 ##### BIAS ADJUST AND SAVE TO NEW FILES - takes a lot of time, leave it off
 DS_y_us_lr = xr.open_dataset("epic_soy_yield_us_lr.nc", decode_times=True) # mask
 
-DS_ec_earth_PD_test, DS_ec_earth_2C_test = bias_correction_masked(
+DS_ec_earth_PD_test, DS_ec_earth_2C_test, DS_ec_earth_3C_test = bias_correction_masked(
     DS_y_us_lr, start_date = '31-12-1916', end_date = '31-12-2016', cru_detrend = True, df_features_ec_3C_season = True, save_figs = True )
 
 DS_ec_earth_PD_test.to_netcdf("ds_ec_earth_PD_us_lr.nc")
@@ -708,14 +720,18 @@ df_features_ec_season_us, df_features_ec_season_2C_us = function_conversion(DS_e
 
 
 #%% yield model - WOFOST - South Brazil
-start_date, end_date = '1958-09-30','2016-03-31' #- 1959 because data before is poor
+start_date, end_date = '1980-09-30','2016-03-31' #- 1959 because data before is poor
 
 #%% CROP MODEL DATASET (yield - ton/year)
 lat_south_america = slice(-50,50)
-DS_y_base_brs = xr.open_dataset("yield_isimip_epic_3A_2.nc",decode_times=True).sel(lat=lat_south_america, lon=slice(-160,-10))
-DS_y = xr.open_dataset("yield_isimip_epic_3A_2_lr.nc",decode_times=True)
+DS_y_base_brs = xr.open_dataset("soy_ibge_yield_1981_2019_lr_2.nc",decode_times=True).sel(lat=lat_south_america, lon=slice(-160,-10))
+DS_y = xr.open_dataset("soy_ibge_yield_1981_2019_lr_2.nc",decode_times=True)
 DS_y['time'] = DS_y_base_brs.time
 
+DS_y['yield'] = DS_y['Yield']
+DS_y = DS_y.drop(['Yield'])
+    
+    
 # conversion to standard form
 def conversion_lat_lon(DS):
     DS.coords['lon'] = (DS.coords['lon'] + 180) % 360 - 180
@@ -809,7 +825,7 @@ plt.figure(figsize=(20,10)) #plot clusters
 ax=plt.axes(projection=ccrs.Mercator())
 DS_cli_brs['tmx'].mean('time').plot(x='lon', y='lat',transform=ccrs.PlateCarree(), robust=True)
 ax.add_geometries(br1_shapes, ccrs.PlateCarree(),edgecolor='black', facecolor=(0,1,0,0.0))
-ax.set_extent([-110,-65,25,50], ccrs.PlateCarree())
+# ax.set_extent([-110,-65,25,50], ccrs.PlateCarree())
 plt.show()
 
 # WP3 climate
@@ -838,20 +854,25 @@ pre_monthly_avr.to_netcdf('BR_pre_clim_1.nc')
 # plt.tight_layout()
 # plt.show()
 
+
+# Import CO2 levels globally
+DS_co2 = xr.open_dataset("ico2_annual_1901 2016.nc",decode_times=False)
+
+DS_co2['time'] = DS_ref.time
+DS_co2 = DS_co2.sel(time=slice(start_date, end_date))
+df_co2 = DS_co2.to_dataframe()
+
 #%% Run model -  
 
 # First convert datasets to dataframes divided by month of season and show timeseries
-df_clim_avg_features_brs, df_epic_det_brs = conversion_clim_yield(DS_y_brs, DS_cli_brs, 
+df_clim_avg_features_brs, df_epic_det_brs = conversion_clim_yield(DS_y_brs, DS_cli_brs, df_co2,
                                                                   months_to_be_used=[1,2], 
                                                                   water_year = True, 
                                                                   detrend = True)
 
+
 # Plot violinplots divided between failure and non-failure to illustrate association of climatic variables
 violin_plots_fail_nofail(DS_cli_brs, df_clim_avg_features_brs, df_epic_det_brs)
-
-# Alternative for better results and aggregation
-# df_clim_avg_features_alt = pd.concat([df_clim_avg_features_brs.iloc[:,0:2].mean(axis=1),df_clim_avg_features_brs.iloc[:,4:6].mean(axis=1),df_clim_avg_features_brs.iloc[:,6:7] ], axis=1)
-# df_clim_avg_features_alt.columns=['tmx_1_2','dtr_1_2', 'spei2_1_2']
 
 df_clim_agg_brs = pd.concat( [df_clim_avg_features_brs.iloc[:,0:2].mean(axis=1),
                                          df_clim_avg_features_brs.iloc[:,4:6].mean(axis=1),
@@ -866,13 +887,19 @@ df_clim_2012_brs = input_features_brs.loc[2005]
 feature_importance_selection(input_features_brs, df_epic_det_brs)
 
 # Main algorithm for training the ML model
-brf_model_brs, dp_fig_brs = failure_probability(input_features_brs, df_epic_det_brs, show_partial_plots= True, model_choice = 'conservative')
+brf_model_brs, fig_dep_brs, rf_scores_brs  = failure_probability(input_features_brs, df_epic_det_brs, show_partial_plots= True, model_choice = 'conservative')
+
+y_test_br = brf_model_brs.predict(input_features_brs)
 
 # Shap functions to explain model
-shap_prop(input_features_brs, df_epic_det_brs, brf_model_brs)
+# shap_prop(input_features_brs, df_epic_det_brs, brf_model_brs)
 
 # Test for failures wrt to real data - validation
 df_perf_train_brs, y_pred_2012_brs, proof_total_brs = failure_test(input_features_brs, df_epic_det_brs, brf_model_brs, df_clim_2012_brs)
+
+# Figure 1 - bar performance - attention graph 
+bar_perf_train_brs, single_plot_brs = bar_perf_train(df_perf_train_brs, rf_scores_brs)
+
 
 #%% #####################################################################################################
 # BIAS ADJUST AND SAVE TO NEW FILES - takes a lot of time, leave it off
@@ -1069,8 +1096,8 @@ DS_ec_earth_3C_ar.to_netcdf("ds_ec_earth_3C_ar.nc")
 #%% yield model - WOFOST - Brazil - central
 start_date, end_date = '1959-09-30','2016-04-30'
 
-DS_y_base_brc = xr.open_dataset("yield_isimip_epic_3A_2.nc",decode_times=True).sel(lat=lat_south_america, lon=slice(-160,-10))
-DS_y = xr.open_dataset("yield_isimip_epic_3A_2_lr.nc",decode_times=True)
+DS_y_base_brc = xr.open_dataset("soy_ibge_yield_1981_2019_lr.nc",decode_times=True).sel(lat=lat_south_america, lon=slice(-160,-10))
+DS_y = xr.open_dataset("soy_ibge_yield_1981_2019_lr.nc",decode_times=True)
 DS_y['time'] = DS_y_base_brc.time
 # conversion to standard form
 def conversion_lat_lon(DS):
