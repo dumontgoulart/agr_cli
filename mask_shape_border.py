@@ -43,5 +43,9 @@ def mask_shape_border (DS,shape_file_address):
     # Clipping and dropping extra dimension
     DS_clipped = DS.rio.clip(mask.geometry.apply(mapping), mask.crs, drop=False)
     DS_clipped = DS_clipped.drop('spatial_ref')
+
+    if 'spatial_ref' in list(DS_clipped.coords):
+        DS_clipped=DS_clipped.drop('spatial_ref')
+    
     
     return(DS_clipped)

@@ -2,7 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from sklearnex import patch_sklearn #optimizes code 
+patch_sklearn()
 
+from sklearn import preprocessing
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, ShuffleSplit
 from sklearn.linear_model import LinearRegression,LogisticRegression
@@ -42,7 +45,6 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
         print(sc_set.sort_values(by=['R2_score'], ascending=False)) 
     #%% Regularize/standard data
     #standardized
-    df_cli2_scaled = df_cli2
     df_t_scaled = df_y_f
     df_scaled = pd.concat([df_cli2, df_y_f], axis=1, sort=False)
     
@@ -52,15 +54,16 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
     df_severe = pd.DataFrame( np.where(df_t_scaled < df_t_scaled.mean() - df_t_scaled.std(),True, False), 
                              index = df_t_scaled.index, columns = ['severe_loss'] ).astype(int)
     loss_intensity = df_severe
-    X, y = df_cli2_scaled, loss_intensity
+    X, y = df_cli2, loss_intensity
     #divide data train and test
-    X_train, X_test, y_train, y_test = train_test_split(df_cli2_scaled, loss_intensity, test_size=0.2, random_state=0, stratify=y)
+    X_train, X_test, y_train, y_test = train_test_split(df_cli2, loss_intensity, test_size=0.2, random_state=0, stratify=y)
     
     #%% heatmap with the correlation of each feature + yield
     corrmat = df_scaled.corr()
     top_corr_features = corrmat.index
-    plt.figure(figsize = (8,8), dpi=250)
-    g = sns.heatmap(df_scaled[top_corr_features].corr(),annot=True, cmap="RdBu",vmin=-1, vmax=1, cbar = False)
+    plt.figure(figsize = (12,12), dpi=250)
+    mask = np.triu(corrmat)
+    g = sns.heatmap(df_scaled[top_corr_features].corr(),annot=True, cmap="RdBu", mask=mask, vmin=-1, vmax=1, cbar = False)
     plt.title("b)", loc = 'left', fontsize=20)
     plt.tight_layout()
     plt.show()
@@ -72,7 +75,7 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
     # plt.title("Kendall rank correlation")
     # plt.show()
     
-    # Get redundant variables and rank them
+#%%    # Get redundant variables and rank them
     def get_redundant_pairs(df):
         pairs_to_drop = set()
         cols = df.columns
@@ -103,10 +106,10 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
         return cor_support, cor_feature
     
     # Pearsons
-    print("Top Pearsons Correlations \n", get_top_abs_correlations(df_cli2_scaled, 5))
+    print("Top Pearsons Correlations \n", get_top_abs_correlations(df_cli2, 5))
     # Kendall
-    print("Top Kendalls Correlations \n", get_top_abs_correlations(df_cli2_scaled, 5, chosen_method = 'kendall'))
-    cor_support, cor_feature = cor_selector(df_cli2_scaled, df_t_scaled, 5)
+    print("Top Kendalls Correlations \n", get_top_abs_correlations(df_cli2, 5, chosen_method = 'kendall'))
+    cor_support, cor_feature = cor_selector(df_cli2, df_t_scaled, 5)
     print("\n The",str(len(cor_feature)), 'Pearsons most important features:', cor_feature)   
     
     #%% grid search - define quantity of features to be used - ANOVA
@@ -156,9 +159,12 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
     X_train_fs, X_test_fs, fs = select_features(X_train, y_train.values.ravel(), X_test)
     
     print("ANOVA most important features:",  X_train.iloc[:,np.argsort(fs.scores_)[-7:]].columns.tolist()[::-1])
+    
+    print("UPDATE")
     #%% Chi 2 select k best    
     from sklearn.feature_selection import chi2
-    import sklearn
+    from sklearn.preprocessing import MinMaxScaler
+
     if len(X_train.columns) > 2:
         sample = 3
     elif len(X_train.columns) > 4:
@@ -166,9 +172,12 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
     else:
         sample = 2
     bestfeatures = SelectKBest(score_func=chi2, k=sample)
-    fit_chi = bestfeatures.fit(sklearn.preprocessing.MinMaxScaler().fit_transform(X_train), y_train.values.ravel())
+
+    scaler = MinMaxScaler().fit(X_train)
+    X_scaled = scaler.transform(X_train)
+    fit_chi = bestfeatures.fit(X_scaled, y_train.values.ravel())
     
-    print("Chi-2 most important features:",X_train.iloc[:,np.argsort(fit_chi.scores_)[-7:]].columns.tolist()[::-1] )  #print 10 best features
+    print("Chi-2 most important features:",X.iloc[:,np.argsort(fit_chi.scores_)[-7:]].columns.tolist()[::-1] )  #print 10 best features
     #%% mutual information feature selection
     # feature selection
     def select_features_mutual(X_train, y_train, X_test):
@@ -185,7 +194,7 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
     # feature selection
     X_train_fs, X_test_fs, fs_mutual = select_features_mutual(X_train, y_train, X_test)
    
-    print("Mutual selection most important features:", X_train.iloc[:,np.argsort(fs_mutual.scores_)[-7:]].columns.tolist()[::-1])
+    print("Mutual selection most important features:", X.iloc[:,np.argsort(fs_mutual.scores_)[-7:]].columns.tolist()[::-1])
     #%%
     from sklearn.model_selection import RepeatedStratifiedKFold
     from sklearn.feature_selection import RFE
@@ -219,45 +228,45 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
      	scores = cross_val_score(model, X, y, scoring='accuracy', cv=cv, n_jobs=-1, error_score='raise')
      	return scores
     
-    # get the models to evaluate
-    models = get_models()
-    # evaluate the models and store results
-    results, names = list(), list()
-    for name, model in models.items():
-     	scores = evaluate_model(model, X, y)
-     	results.append(scores)
-     	names.append(name)
-     	print('>%s %.3f (%.3f)' % (name, np.mean(scores), np.std(scores)))
-    # plot model performance for comparison
-    plt.boxplot(results, labels=names, showmeans=True)
-    plt.show()
+    # # get the models to evaluate
+    # models = get_models()
+    # # evaluate the models and store results
+    # results, names = list(), list()
+    # for name, model in models.items():
+    #  	scores = evaluate_model(model, X, y)
+    #  	results.append(scores)
+    #  	names.append(name)
+    #  	print('>%s %.3f (%.3f)' % (name, np.mean(scores), np.std(scores)))
+    # # plot model performance for comparison
+    # plt.boxplot(results, labels=names, showmeans=True)
+    # plt.show()
     #%% random forest feature selection
-    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
     from sklearn.tree import DecisionTreeClassifier
-    rfc = RandomForestClassifier(n_estimators=600, random_state=0, n_jobs=-1,  
-                                        class_weight='balanced_subsample', max_depth = 10)
+    rfc = RandomForestRegressor(n_estimators=600, random_state=0, n_jobs=-1, max_depth = 10)
+    
     # fit the model
     rfc.fit(X, y.values.ravel())
     # get importance
     importance = rfc.feature_importances_
+
+    print("random forest classifier most important features:", X.iloc[:, np.argsort(importance)[-7:]].columns.tolist()[::-1])
     
-    print("random forest classifier most important features:", X_train.iloc[:,np.argsort(importance)[-7:]].columns.tolist()[::-1])
+    # fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(7,10), dpi=500)
     
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(7,10), dpi=500)
-    
-    fig.subplots_adjust(hspace=.1)
-    ax1.bar(X_train.columns, fs.scores_)
-    ax1.set_xticklabels([])
-    ax1.set_title("a) ANOVA")
-    ax2.bar(X_train.columns, fs_mutual.scores_)
-    ax2.set_title("b) Mutual information selection")
-    ax2.set_xticklabels([])
-    ax3.bar(X_train.columns, importance)
-    ax3.set_title("c) Random forest classifier")
-    ax3.set_xticklabels([])
-    ax4.bar(X_train.columns, fit_chi.scores_)
-    ax4.set_title("d) Chi-2")
-    fig.tight_layout()
+    # fig.subplots_adjust(hspace=.1)
+    # ax1.bar(X_train.columns, fs.scores_)
+    # ax1.set_xticklabels([])
+    # ax1.set_title("a) ANOVA")
+    # ax2.bar(X_train.columns, fs_mutual.scores_)
+    # ax2.set_title("b) Mutual information selection")
+    # ax2.set_xticklabels([])
+    # ax3.bar(X_train.columns, importance)
+    # ax3.set_title("c) Random forest classifier")
+    # ax3.set_xticklabels([])
+    # ax4.bar(X_train.columns, fit_chi.scores_)
+    # ax4.set_title("d) Chi-2")
+    # fig.tight_layout()
     # fig.savefig('features_rank_bar.png', bbox_inches='tight')
 #%% Feature selection with all possible subsets
     if feat_sel == True:    
@@ -291,11 +300,11 @@ def feature_importance_selection(df_cli2, df_y_f, show_scatter = True, feat_sel 
         # report best
         print('Done!')
         print('Best subset: (%s) = %f' % (best_subset, best_score))
-    return g, fig
+    return sc_set #fig #g,
     
      
 
-#%%
+#%% Failure probability function
 def failure_probability(df_cli2, df_y_f, config_hyperparameters = False, show_partial_plots = False, model_choice = 'balanced'):
 
     """
@@ -599,6 +608,7 @@ def failure_probability(df_cli2, df_y_f, config_hyperparameters = False, show_pa
         # plot_sing.plot()
         # ax1.set_title("b) Partial dependence plots")
         plot_sing_1.axes_[0][0].set_ylabel("Failure Probability")
+        plt.setp(plot_sing_1.deciles_vlines_, visible=False)
         fig.savefig('paper_figures/partial_plot_single.png', bbox_inches='tight')
         plt.show()
  
